@@ -76,7 +76,7 @@ function route() {
   const anchor = PAGE_ANCHORS[p + "/" + rest.join("/")];
   if (anchor) setTimeout(() => $(anchor).scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   else window.scrollTo({ top: 0 });
-  if ((p === "lab" || p === "ops") && rest[0] && $("#tool-" + rest[0])) setTimeout(() => showTool(rest[0], true), 50);
+  if ((p === "lab" || p === "ops" || p === "atc") && rest[0] && $("#tool-" + rest[0])) setTimeout(() => showTool(rest[0], true), 50);
 }
 window.addEventListener("hashchange", route);
 
@@ -808,6 +808,340 @@ function renderSquawk() {
     out.innerHTML = s ? `<b style="color:${s.color}">${esc(s.name)}</b><br>${esc(s.d)}` : `✅ Valid code. <b>${v}</b> is a normal discrete code ATC might assign to identify one specific aircraft on radar.`;
   };
   $("#sqIn").addEventListener("input", check); check();
+}
+
+// ================= COMMUNICATION EXPLORER =================
+// Five ATC-page tools. All callsigns, airports and frequencies are fictional examples (see data.js).
+function commsXP(key, n, msg) { // award XP once per profile per activity
+  const seen = store.get("commsSeen", []);
+  if (seen.includes(key)) return;
+  seen.push(key); store.set("commsSeen", seen); addXP(n, msg);
+}
+const spellPhonetic = (s) => [...String(s).toUpperCase()].map((c) => (c === "-" ? null : PHONETIC[c])).filter(Boolean).join(" ");
+const sayable = (s) => String(s).replace(/\b(ATC|Pilot|ATIS):/g, "").replace(/[✔✘"—…]/g, " ").replace(/\s+/g, " ").trim();
+const NUM_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+const twoDigits = (n) => (n < 20 ? NUM_WORDS[n] : TENS[Math.floor(n / 10)] + (n % 10 ? "-" + NUM_WORDS[n % 10] : ""));
+function groupedNumber(d) { // "451" -> "four fifty-one", "1204" -> "twelve zero four"
+  const n = +d;
+  if (d.length <= 2) return twoDigits(n);
+  const head = Math.floor(n / 100), tail = n % 100;
+  const headW = d.length === 3 ? NUM_WORDS[head] : twoDigits(head);
+  return tail === 0 ? `${headW} hundred` : `${headW} ${tail < 10 ? "zero " + NUM_WORDS[tail] : twoDigits(tail)}`;
+}
+
+// ---- Phraseology library ----
+const phr = { cat: "all", qi: 0, score: 0, order: [], answered: false };
+function renderPhraseology() {
+  const q = $("#phrSearch").value.trim().toLowerCase();
+  $("#phrFilters").innerHTML = [["all", "All"], ...Object.entries(PHRASE_CATS)]
+    .map(([k, v]) => `<button class="chip ${phr.cat === k ? "active" : ""}" data-cat="${k}">${esc(v)}</button>`).join("");
+  const list = PHRASES.map((p, i) => ({ ...p, i }))
+    .filter((p) => (phr.cat === "all" || p.cat === phr.cat) && (!q || `${p.w} ${p.means} ${p.ex} ${p.tip}`.toLowerCase().includes(q)));
+  $("#phrGrid").innerHTML = list.length ? list.map((p) => `<div class="phr-card phr-${p.cat}">
+      <div class="phr-top"><b>${esc(p.w)}</b><span class="badge">${esc(PHRASE_CATS[p.cat])}</span></div>
+      <p>${esc(p.means)}</p>
+      <div class="ex">${esc(p.ex)}</div>
+      ${p.tip ? `<p class="small phr-tip">💡 ${esc(p.tip)}</p>` : ""}
+      ${"speechSynthesis" in window ? `<button class="btn ghost small" data-say="${p.i}">🔊 Listen</button>` : ""}
+    </div>`).join("") : `<p class="sub">No phrases match "${esc(q)}".</p>`;
+}
+function startPhrQuiz() { Object.assign(phr, { qi: 0, score: 0, order: shuffle(PHRASE_QUIZ), answered: false }); renderPhrQuiz(); }
+function renderPhrQuiz() {
+  const n = phr.order.length;
+  if (phr.qi >= n) {
+    $("#phrQuiz").innerHTML = `<p><b>You scored ${phr.score} / ${n}.</b> ${phr.score === n ? "Perfect radio discipline! 🎧" : "Review the cards above and try again."}</p>
+      <button class="btn small" id="phrRetry">↺ Try again</button>`;
+    $("#phrRetry").onclick = startPhrQuiz;
+    if (phr.score >= n - 1) commsXP("phrquiz", 5, "Phraseology check passed");
+    return;
+  }
+  const [sit, ans, wrong] = phr.order[phr.qi];
+  phr.answered = false;
+  $("#phrQuiz").innerHTML = `<p><span class="sub">Question ${phr.qi + 1} of ${n}</span><br><b>${esc(sit)}</b></p>
+    <div class="row phr-opts">${shuffle([ans, ...wrong]).map((o) => `<button class="btn ghost small" data-a="${esc(o)}">${esc(o)}</button>`).join("")}</div>
+    <div class="phr-fb" id="phrFb"></div>`;
+}
+
+// ---- Call sign explorer ----
+const cs = { mode: "reg", unit: "Tower" };
+function parseReg(raw) {
+  const r = raw.toUpperCase().replace(/\s+/g, "");
+  if (!/^[A-Z0-9-]{3,8}$/.test(r) || !/[A-Z]/.test(r)) return null;
+  const prefixes = [...REG_PREFIXES].sort((a, b) => b[0].length - a[0].length);
+  let pre = r.includes("-") ? r.split("-")[0] : (prefixes.find(([p]) => r.startsWith(p)) || [])[0];
+  const country = (REG_PREFIXES.find(([p]) => p === pre) || [])[1];
+  return { r, pre, country, us: pre === "N" };
+}
+function currentCallsign() { // { written, spoken }
+  if (cs.mode === "reg") {
+    const p = parseReg($("#csReg").value);
+    return p ? { written: p.r, spoken: spellPhonetic(p.r) } : null;
+  }
+  const a = FICT_AIRLINES[+$("#csAirline").value], f = $("#csFlight").value.trim(), suf = $("#csSuffix").value;
+  if (!/^\d{1,4}$/.test(f)) return null;
+  const tc = a.tel.charAt(0) + a.tel.slice(1).toLowerCase();
+  return { written: `${tc} ${f}${suf ? " " + suf.charAt(0) + suf.slice(1).toLowerCase() : ""}`, spoken: `${a.tel} ${spellPhonetic(f)}${suf ? " " + suf : ""}` };
+}
+function renderCallsign() {
+  const out = $("#csOut");
+  const sayBtn = (txt) => ("speechSynthesis" in window ? `<button class="btn ghost small" data-speak="${esc(txt)}">🔊 Hear it</button>` : "");
+  if (cs.mode === "reg") {
+    const p = parseReg($("#csReg").value);
+    if (!p) { out.innerHTML = `<span class="sub">Enter a registration of 3–8 letters and digits, e.g. G-ZZXY or N451AL.</span>`; }
+    else {
+      const body = p.r.replace(/-/g, "");
+      const abbr = p.us ? body.slice(-3) : body.charAt(0) + body.slice(-2);
+      out.innerHTML = `<div class="cs-big">${esc(p.r)}</div>
+        <div class="cs-line"><small>Spoken in full</small><b>${esc(spellPhonetic(p.r))}</b></div>
+        <div class="cs-line"><small>${p.us ? "Shortened (USA: type + last three)" : "Abbreviated (only after ATC does it first)"}</small><b>${p.us ? "e.g. Cessna " : ""}${esc(spellPhonetic(abbr))}</b></div>
+        <div class="cs-line"><small>Registered in</small><b>${p.country ? `${esc(p.country)} (prefix ${esc(p.pre)})` : "Unknown prefix in this explorer"}</b></div>
+        ${sayBtn(spellPhonetic(p.r))}`;
+    }
+  } else {
+    const a = FICT_AIRLINES[+$("#csAirline").value], f = $("#csFlight").value.trim(), suf = $("#csSuffix").value;
+    if (!/^\d{1,4}$/.test(f)) out.innerHTML = `<span class="sub">Enter a flight number of 1–4 digits.</span>`;
+    else {
+      const c = currentCallsign();
+      out.innerHTML = `<div class="cs-big">${esc(a.code)}${esc(f)}</div>
+        <div class="cs-line"><small>Radar label / flight plan (ICAO code)</small><b>${esc(a.code)}${esc(f)} — ${esc(a.name)} (fictional)</b></div>
+        <div class="cs-line"><small>Spoken, digit by digit (ICAO standard)</small><b>${esc(c.spoken)}</b></div>
+        <div class="cs-line"><small>Spoken in group form (used by many airlines)</small><b>${esc(a.tel)} ${esc(groupedNumber(f))}${suf ? " " + suf : ""}</b></div>
+        ${suf ? `<div class="cs-line"><small>Why "${suf}"?</small><b>${suf === "SUPER" ? "The very largest aircraft (e.g. A380-size) — the strongest wake turbulence." : "A heavy wake turbulence category aircraft — following aircraft need extra spacing."}</b></div>` : ""}
+        ${sayBtn(c.spoken)}`;
+    }
+  }
+  renderFacility();
+}
+function renderFacility() {
+  $$("#csUnits .chip").forEach((b) => b.classList.toggle("active", b.dataset.u === cs.unit));
+  const u = FACILITY_UNITS.find((x) => x.s === cs.unit), ap = $("#csAirport").value;
+  const name = `${ap} ${u.s}`, me = currentCallsign();
+  const first = u.s === "Information" ? `You don't call ATIS — you listen, then say "information Bravo" on first contact with the next controller.`
+    : me ? `First call: "${name}, ${me.written}, …"` : "Build an aircraft call sign on the left to see a first call.";
+  $("#csFacOut").innerHTML = `<div class="cs-big">${esc(name)}</div><p>${esc(u.d)}</p><div class="ex">${esc(first)}</div>
+    ${"speechSynthesis" in window ? `<button class="btn ghost small" data-speak="${esc(u.s === "Information" ? name : first.replace(/^First call: /, ""))}">🔊 Hear it</button>` : ""}`;
+}
+
+// ---- Communication breakdown ----
+const brk = { id: BREAKDOWNS[0].id, where: "air", light: null, demoBusy: false };
+function renderBreakdown() {
+  $("#brkChips").innerHTML = BREAKDOWNS.map((b) => `<button class="chip ${b.id === brk.id ? "active" : ""}" data-b="${b.id}">${b.icon} ${esc(b.t)}</button>`).join("");
+  const b = BREAKDOWNS.find((x) => x.id === brk.id);
+  $("#brkDetail").innerHTML = `<h4 class="brk-title">${b.icon} ${esc(b.t)}</h4>
+    <p>${esc(b.what)}</p>
+    <div class="brk-grid">
+      <div><small>🎧 What it sounds like</small><p>${esc(b.sounds)}</p></div>
+      <div><small>🧑‍✈️ What the pilot does</small><p>${esc(b.pilot)}</p></div>
+      <div><small>🗼 What ATC does</small><p>${esc(b.atc)}</p></div>
+    </div>
+    <div class="brk-check"><b>Check:</b> ${esc(b.check.q)}
+      <div class="row">${shuffle(b.check.o.map((o, i) => [o, i])).map(([o, i]) => `<button class="btn ghost small" data-o="${i}">${esc(o)}</button>`).join("")}</div>
+      <div class="phr-fb" id="brkFb"></div></div>`;
+}
+function playBlockedDemo() {
+  if (brk.demoBusy) return;
+  brk.demoBusy = true;
+  const A = "Harbourton Tower, AeroLearn 451, ready for departure runway 09";
+  const B = "Harbourton Tower, G-ZZXY, downwind runway 09 to land";
+  const wa = A.split(" "), wb = B.split(" ");
+  const mixed = Array.from({ length: Math.max(wa.length, wb.length) }, (_, i) => (i % 2 ? "▒▒▒" : (i % 4 ? wb[i] : wa[i]) || "▒▒▒")).join(" ");
+  const box = $("#brkDemo");
+  box.innerHTML = `<div class="brk-tx"><span class="badge">AeroLearn 451 transmits</span><div class="bubble">${esc(A)}</div></div>
+    <div class="brk-tx"><span class="badge custom">G-ZZXY transmits at the same time</span><div class="bubble">${esc(B)}</div></div>`;
+  setTimeout(() => {
+    box.insertAdjacentHTML("beforeend", `<div class="brk-tx"><span class="badge">What the tower hears</span><div class="bubble garbled">〰 SQUEEEAL 〰 ${esc(mixed)} 〰</div></div>`);
+  }, 1200);
+  setTimeout(() => {
+    const reply = "Station calling Harbourton Tower, you were blocked, say again.";
+    box.insertAdjacentHTML("beforeend", `<div class="brk-tx"><span class="badge">Tower replies</span><div class="bubble">${esc(reply)}</div></div>
+      <p class="small sub">Neither pilot knows if their call was heard — so both must wait a moment and call again. Fictional example; nothing is transmitted.</p>`);
+    if ("speechSynthesis" in window) speak(reply);
+    brk.demoBusy = false;
+    commsXP("brkdemo", 2, "Blocked call demo");
+  }, 2600);
+}
+function renderLights() {
+  $$("#lightWhere button").forEach((b) => b.classList.toggle("active", b.dataset.w === brk.where));
+  $("#lightBtns").innerHTML = LIGHT_SIGNALS.map((s) => `<button class="light-btn ${brk.light === s.id ? "active" : ""}" data-l="${s.id}">
+    <span class="lamp ${s.flash ? "flash" : ""}" style="background:${s.color};box-shadow:0 0 12px ${s.color}"></span>${esc(s.lbl)}</button>`).join("");
+  const s = LIGHT_SIGNALS.find((x) => x.id === brk.light);
+  $("#lightOut").innerHTML = s ? `<b>${esc(s.lbl)}</b> to an aircraft ${brk.where === "air" ? "in the air" : "on the ground"}: <b>${esc(s[brk.where])}</b>
+      <p class="small sub" style="margin:.4rem 0 0">Pilots acknowledge by rocking the wings in the air, or by moving the ailerons or rudder / flashing lights on the ground. ICAO signals; some countries differ.</p>`
+    : `<span class="sub">Choose a signal above.</span>`;
+}
+
+// ---- Frequency explorer ----
+function lookupFreq(raw) {
+  const f = parseFloat(String(raw).replace(",", "."));
+  if (!isFinite(f) || f <= 0) return `<span class="sub">Type a frequency in MHz (e.g. 121.5) or tap an example.</span>`;
+  if (f > 30000) return `<span class="sub">That's above 30 GHz — beyond this explorer's range.</span>`;
+  const band = BANDS.find(([, a, b]) => f >= a && f < b);
+  const hits = FREQ_SERVICES.filter((s) => f >= s.from - 1e-9 && f <= s.to + 1e-9);
+  const ids = hits.map((s) => s.id);
+  let verdict;
+  if (ids.includes("guard")) verdict = ["ok", "✅ Aviation emergency frequency — for real emergencies only."];
+  else if (ids.includes("air")) verdict = ["ok", "✅ Aviation VHF voice — pilots and ATC talk here."];
+  else if (ids.includes("hfa")) verdict = ["ok", "✅ Inside the HF band used for long-range aviation voice (alongside many other HF users)."];
+  else if (ids.includes("uhf")) verdict = ["mid", "🪖 Military UHF airband — military aircraft and military ATC."];
+  else if (ids.includes("nav") || ids.includes("dme")) verdict = ["mid", "🧭 Aviation navigation signals — receive-only, nobody talks here."];
+  else verdict = ["no", "❌ Not an aviation voice frequency — you can't reach ATC here."];
+  let grid = "";
+  if (ids.includes("air")) {
+    const khz = Math.round(f * 1000);
+    grid = khz % 25 === 0 ? "On the 25 kHz channel grid." : "Not on the 25 kHz grid — in Europe this could be one of the narrower 8.33 kHz channels.";
+  }
+  const wl = 299.792458 / f;
+  return `<div class="fx-verdict ${verdict[0]}">${verdict[1]}</div>
+    <div class="cs-line"><small>Band</small><b>${band ? `${band[0]} (${band[1] < 1 ? band[1] * 1000 + " kHz" : band[1] + " MHz"} – ${band[2] < 1 ? band[2] * 1000 + " kHz" : band[2] + " MHz"})` : "Below LF"}</b></div>
+    <div class="cs-line"><small>Service(s) in this explorer</small><b>${hits.length ? hits.map((s) => esc(s.name)).join(" · ") : "None listed — other radio services use this part of the spectrum"}</b></div>
+    <div class="cs-line"><small>Wavelength</small><b>≈ ${wl >= 1 ? wl.toFixed(2) + " m" : (wl * 100).toFixed(1) + " cm"}</b></div>
+    ${grid ? `<div class="cs-line"><small>Channel spacing</small><b>${grid}</b></div>` : ""}`;
+}
+function renderFreqx() {
+  const ex = [["121.5", "Emergency"], ["118.700", "Fictional tower"], ["98.5", "FM radio"], ["156.8", "Marine ch 16"], ["446.1", "PMR446"], ["1090", "Transponder"], ["11.3", "HF"]];
+  $("#fxOut").innerHTML = lookupFreq($("#fxIn").value) +
+    `<div class="chips">${ex.map(([f, l]) => `<button class="chip" data-fx="${f}">${f} · ${esc(l)}</button>`).join("")}</div>`;
+}
+function showFreqService(id) {
+  const s = FREQ_SERVICES.find((x) => x.id === id);
+  $$("#fxList .fx-item").forEach((b) => b.classList.toggle("active", b.dataset.s === id));
+  const fmt = (f) => (f < 1 ? `${Math.round(f * 1000)} kHz` : `${f} MHz`);
+  $("#fxDetail").innerHTML = `<b>${esc(s.name)}</b> — ${s.from === s.to ? fmt(s.from) : `${fmt(s.from)} – ${fmt(s.to)}`}
+    <span class="badge ${s.aero ? "" : "custom"}">${s.aero ? "Aviation" : "Not aviation"}</span>
+    <div class="cs-line"><small>Modulation</small><b>${esc(s.mod)}</b></div>
+    <div class="cs-line"><small>Typical range</small><b>${esc(s.range)}</b></div>
+    <div class="cs-line"><small>Who uses it</small><b>${esc(s.users)}</b></div>
+    <p class="small" style="margin:.5rem 0 0">💡 ${esc(s.note)}</p>`;
+}
+function renderRange() {
+  const h1 = +$("#fxAlt").value, h2 = +$("#fxAnt").value;
+  $("#fxAltV").textContent = `${h1.toLocaleString()} ft`; $("#fxAntV").textContent = `${h2} ft`;
+  const nm = 1.23 * (Math.sqrt(h1) + Math.sqrt(h2)), max = 1.23 * (Math.sqrt(40000) + Math.sqrt(500));
+  const say = nm < 15 ? "Barely past the airport fence — this is why low-flying aircraft and aircraft on the ground lose contact with distant stations."
+    : nm < 60 ? "Roughly the area around one airport — fine for talking to the tower or approach."
+    : nm < 150 ? "A regional area — typical for approach and lower en-route sectors."
+    : "Hundreds of kilometres — high-flying airliners can be heard by many ground stations at once.";
+  $("#fxRangeOut").innerHTML = `<div class="fx-bar"><div style="width:${Math.max((nm / max) * 100, 1)}%"></div></div>
+    <p><b>≈ ${Math.round(nm)} NM</b> (${Math.round(nm * 1.852)} km) radio horizon. ${say}</p>`;
+}
+
+// ---- Communication timeline ----
+const tl = { i: 0, practice: false, revealed: new Set() };
+function renderTimelineProfile() {
+  const X = (x) => 20 + x * 6, Y = (a) => 118 - (a / 36000) * 92;
+  const pts = TIMELINE.map((s) => [X(s.x), Y(s.alt)]);
+  const path = `M${X(0)} ${Y(0)} ` + pts.map(([x, y]) => `L${x} ${y}`).join(" ") + ` L${X(100)} ${Y(0)}`;
+  const cur = pts[tl.i];
+  $("#tlProfile").innerHTML = `<line x1="10" y1="${Y(0) + 4}" x2="630" y2="${Y(0) + 4}" class="tl-ground"/>
+    <path d="${path}" class="tl-path"/>
+    <text x="${X(0)}" y="136" class="tl-lbl" text-anchor="start">WESTBROOK (fictional)</text>
+    <text x="${X(100)}" y="136" class="tl-lbl" text-anchor="end">HARBOURTON (fictional)</text>
+    <text x="${X(45)}" y="${Y(36000) - 6}" class="tl-lbl" text-anchor="middle">FL360</text>
+    ${pts.map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i === tl.i ? 7 : 5}" class="tl-dot ${i === tl.i ? "cur" : i < tl.i ? "done" : ""}" data-i="${i}"><title>${esc(TIMELINE[i].phase)}</title></circle>`).join("")}
+    <text x="${cur[0]}" y="${cur[1] - 12}" class="tl-plane" text-anchor="middle">✈</text>`;
+}
+function renderTimeline() {
+  const s = TIMELINE[tl.i];
+  $("#tlSteps").innerHTML = TIMELINE.map((x, i) => `<button class="tl-step ${i === tl.i ? "active" : i < tl.i ? "done" : ""}" data-i="${i}"><small>${x.t}</small>${esc(x.phase)}</button>`).join("");
+  renderTimelineProfile();
+  $("#tlPrev").disabled = tl.i === 0;
+  $("#tlNext").textContent = tl.i === TIMELINE.length - 1 ? "↺ Start again" : `Next: ${TIMELINE[tl.i + 1].phase} →`;
+  $("#tlDetail").innerHTML = `<div class="atc-head"><b>${esc(s.phase)} — ${esc(s.unit)}</b><span><span class="sub small">${s.t}</span> <span class="freq">${s.freq} MHz</span></span></div>
+    ${s.listen ? `<p class="small sub">📼 Listen only — the crew don't transmit on ATIS.</p>` : ""}
+    <div class="tl-lines">${s.lines.map(([who, text, rb], li) => {
+      const key = tl.i + ":" + li, hide = tl.practice && rb && !tl.revealed.has(key);
+      return `<div class="tl-line ${who === "PILOT" ? "pilot" : "atc"}"><span class="tl-who">${who === "PILOT" ? "🧑‍✈️ Pilot" : who === "ATIS" ? "📼 ATIS" : "🗼 ATC"}</span>
+        ${hide ? `<button class="btn ghost small tl-reveal" data-k="${key}">What should the readback be? Think, then tap to reveal</button>`
+          : `<div class="bubble">${esc(text)}${rb ? ` <span class="tl-rb">READBACK</span>` : ""}</div>`}</div>`;
+    }).join("")}</div>
+    <p class="tl-note">💡 ${esc(s.note)}</p>
+    <p class="small sub">Fictional educational example — not for real-world use.</p>`;
+  if (tl.i === TIMELINE.length - 1) commsXP("timeline", 5, "Followed a flight's communications");
+}
+function playTimelineStage() {
+  const s = TIMELINE[tl.i];
+  const lines = s.lines.filter(([, , rb], li) => !(tl.practice && rb && !tl.revealed.has(tl.i + ":" + li))).map(([, t]) => t);
+  speak(lines.join(" … "));
+}
+
+function initComms() {
+  // Phraseology
+  $("#phrSearch").addEventListener("input", renderPhraseology);
+  $("#phrFilters").addEventListener("click", (e) => { const b = e.target.closest("[data-cat]"); if (b) { phr.cat = b.dataset.cat; renderPhraseology(); } });
+  $("#phrGrid").addEventListener("click", (e) => { const b = e.target.closest("[data-say]"); if (b) { speak(sayable(PHRASES[+b.dataset.say].ex)); commsXP("phrlisten", 2, "Phraseology explored"); } });
+  $("#phrQuiz").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-a]");
+    if (b && !phr.answered) {
+      phr.answered = true;
+      const ans = phr.order[phr.qi][1], ok = b.dataset.a === ans;
+      if (ok) phr.score++;
+      $$("#phrQuiz [data-a]").forEach((x) => { x.disabled = true; x.classList.toggle("ok", x.dataset.a === ans); x.classList.toggle("bad", x === b && !ok); });
+      const p = PHRASES.find((x) => x.w === ans);
+      $("#phrFb").innerHTML = `${ok ? "✅ Correct!" : `❌ The best word is <b>${esc(ans)}</b>.`} ${p ? esc(p.means) : ""} <button class="btn small" id="phrNext">Next →</button>`;
+      $("#phrNext").onclick = () => { phr.qi++; renderPhrQuiz(); };
+    }
+  });
+  renderPhraseology(); startPhrQuiz();
+
+  // Call signs
+  $("#csAirline").innerHTML = FICT_AIRLINES.map((a, i) => `<option value="${i}">${esc(a.name)} — "${esc(a.tel)}"</option>`).join("");
+  $("#csAirport").innerHTML = FICT_AIRPORTS.map((a) => `<option>${esc(a)}</option>`).join("");
+  $("#csUnits").innerHTML = FACILITY_UNITS.map((u) => `<button class="chip" data-u="${u.s}">${esc(u.s)}</button>`).join("");
+  $("#csPrefixes").innerHTML = REG_PREFIXES.map(([p, c, ex]) => `<button class="chip" data-reg="${ex}" title="Try ${ex} (fictional)"><b>${p}</b>&nbsp;${esc(c)}</button>`).join("");
+  $("#csMode").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-mode]"); if (!b) return;
+    cs.mode = b.dataset.mode;
+    $$("#csMode button").forEach((x) => x.classList.toggle("active", x === b));
+    $("#csRegFields").classList.toggle("hidden", cs.mode !== "reg");
+    $("#csAirFields").classList.toggle("hidden", cs.mode === "reg");
+    renderCallsign();
+  });
+  ["csReg", "csFlight"].forEach((id) => $("#" + id).addEventListener("input", () => { renderCallsign(); commsXP("callsign", 2, "Call sign built"); }));
+  ["csAirline", "csSuffix", "csAirport"].forEach((id) => $("#" + id).addEventListener("change", renderCallsign));
+  $("#csUnits").addEventListener("click", (e) => { const b = e.target.closest("[data-u]"); if (b) { cs.unit = b.dataset.u; renderFacility(); } });
+  $("#csPrefixes").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-reg]"); if (!b) return;
+    if (cs.mode !== "reg") $('#csMode [data-mode="reg"]').click();
+    $("#csReg").value = b.dataset.reg; renderCallsign();
+  });
+  $("#tool-callsign").addEventListener("click", (e) => { const b = e.target.closest("[data-speak]"); if (b) speak(sayable(b.dataset.speak)); });
+  renderCallsign();
+
+  // Breakdown
+  $("#brkChips").addEventListener("click", (e) => { const b = e.target.closest("[data-b]"); if (b) { brk.id = b.dataset.b; renderBreakdown(); } });
+  $("#brkDetail").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-o]"); if (!b) return;
+    const sc = BREAKDOWNS.find((x) => x.id === brk.id), ok = +b.dataset.o === sc.check.a;
+    $$("#brkDetail [data-o]").forEach((x) => { x.disabled = true; x.classList.toggle("ok", +x.dataset.o === sc.check.a); x.classList.toggle("bad", x === b && !ok); });
+    $("#brkFb").innerHTML = ok ? "✅ Correct!" : `❌ Not quite — the answer is <b>${esc(sc.check.o[sc.check.a])}</b>.`;
+    if (ok) commsXP("brk-" + sc.id, 2, "Comms problem solved");
+  });
+  $("#brkDemoBtn").onclick = playBlockedDemo;
+  $("#lightWhere").addEventListener("click", (e) => { const b = e.target.closest("[data-w]"); if (b) { brk.where = b.dataset.w; renderLights(); } });
+  $("#lightBtns").addEventListener("click", (e) => { const b = e.target.closest("[data-l]"); if (b) { brk.light = b.dataset.l; renderLights(); } });
+  renderBreakdown(); renderLights();
+
+  // Frequency explorer
+  $("#fxIn").addEventListener("input", renderFreqx);
+  $("#fxOut").addEventListener("click", (e) => { const b = e.target.closest("[data-fx]"); if (b) { $("#fxIn").value = b.dataset.fx; renderFreqx(); commsXP("freqx", 2, "Frequency explored"); } });
+  $("#fxList").innerHTML = FREQ_SERVICES.map((s) => `<button class="fx-item ${s.aero ? "aero" : ""}" data-s="${s.id}">
+    <b>${esc(s.name)}</b><small>${s.from === s.to ? s.from : `${s.from}–${s.to}`} MHz · ${s.aero ? "✈ aviation" : "not aviation"}</small></button>`).join("");
+  $("#fxList").addEventListener("click", (e) => { const b = e.target.closest("[data-s]"); if (b) showFreqService(b.dataset.s); });
+  ["fxAlt", "fxAnt"].forEach((id) => $("#" + id).addEventListener("input", renderRange));
+  renderFreqx(); showFreqService("air"); renderRange();
+
+  // Timeline
+  const go = (i) => { tl.i = (i + TIMELINE.length) % TIMELINE.length; renderTimeline(); };
+  $("#tlSteps").addEventListener("click", (e) => { const b = e.target.closest("[data-i]"); if (b) go(+b.dataset.i); });
+  $("#tlProfile").addEventListener("click", (e) => { const b = e.target.closest("[data-i]"); if (b) go(+b.dataset.i); });
+  $("#tlPrev").onclick = () => { if (tl.i > 0) go(tl.i - 1); };
+  $("#tlNext").onclick = () => go(tl.i + 1);
+  $("#tlPlay").onclick = playTimelineStage;
+  if (!("speechSynthesis" in window)) $("#tlPlay").classList.add("hidden");
+  $("#tlPractice").onchange = (e) => { tl.practice = e.target.checked; tl.revealed.clear(); renderTimeline(); };
+  $("#tlDetail").addEventListener("click", (e) => { const b = e.target.closest(".tl-reveal"); if (b) { tl.revealed.add(b.dataset.k); renderTimeline(); } });
+  renderTimeline();
 }
 
 // ================= QUIZ =================
@@ -1701,6 +2035,7 @@ renderSpectrum();
 updateAxes();
 renderConverter();
 renderSquawk();
+initComms();
 startQuiz();
 renderFlashFilters();
 buildDeck();
