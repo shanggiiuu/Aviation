@@ -9,7 +9,7 @@ const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { co
 // Global keys are shared by everyone on this device; all other keys belong to the active profile.
 // The built-in "guest" profile uses the original un-prefixed keys, so earlier progress is kept.
 const GLOBAL_KEYS = ["posts", "profiles", "current"];
-const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone"];
+const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone", "airportMap"];
 const rawGet = (key, def) => { try { const v = localStorage.getItem(key); return v === null ? def : JSON.parse(v); } catch { return def; } };
 const rawSet = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 let CURRENT = rawGet("sky_current", "guest");
@@ -61,7 +61,7 @@ document.addEventListener("click", (e) => {
 });
 
 // ================= Router =================
-const pages = ["home", "dashboard", "academy", "lab", "atc", "dictionary", "aircraft", "quiz", "community", "profile"];
+const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "quiz", "community", "profile"];
 const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer" };
 const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy" }; // old links keep working
 function route() {
@@ -76,7 +76,7 @@ function route() {
   const anchor = PAGE_ANCHORS[p + "/" + rest.join("/")];
   if (anchor) setTimeout(() => $(anchor).scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   else window.scrollTo({ top: 0 });
-  if (p === "lab" && rest[0] && $("#tool-" + rest[0])) setTimeout(() => showTool(rest[0], true), 50);
+  if ((p === "lab" || p === "ops") && rest[0] && $("#tool-" + rest[0])) setTimeout(() => showTool(rest[0], true), 50);
 }
 window.addEventListener("hashchange", route);
 
@@ -2531,3 +2531,644 @@ function labTick(t) {
 }
 initForces(); initAero(); initEngines();
 requestAnimationFrame(labTick);
+
+// ================= Flight Operations & Airport Management =================
+
+// ---------- Airport Builder ----------
+// A 20×12 tile grid. Runways are straight lines of ≥6 runway tiles and are numbered from their direction;
+// a breadth-first search through taxiway tiles checks the runway is connected to the apron (and drives the test flight).
+const AB_COLS = 20, AB_ROWS = 12, AB_T = 32;
+const AB_TILES = {
+  runway: { name: "Runway", icon: "🛬", d: "Where aircraft take off and land. Paint a <b>straight line at least 6 squares long</b>. It gets numbered automatically from the direction it points: east–west is 09/27, north–south is 18/36." },
+  taxiway: { name: "Taxiway", icon: "🟨", d: "The 'roads' aircraft use between the runway and the apron. Real taxiways have yellow centrelines and blue edge lights. Join one side to the runway and the other to the apron." },
+  apron: { name: "Apron", icon: "⬛", d: "The parking area (also called the ramp) where aircraft load, unload, and refuel next to the terminal." },
+  terminal: { name: "Terminal", icon: "🏢", d: "The building for check-in, security, shops, and gates. It must touch the apron so passengers can reach the aircraft." },
+  hangar: { name: "Hangar", icon: "🔧", d: "A giant garage where aircraft are maintained and stored. It needs taxiway or apron access so aircraft can be towed in." },
+  tower: { name: "Control tower", icon: "🗼", d: "Air traffic controllers need a clear view of every runway and taxiway, so towers are tall and sit near the middle of the airfield." },
+  fuel: { name: "Fuel farm", icon: "⛽", d: "Big tanks of jet fuel. Fuel trucks (or underground 'hydrant' pipes) carry it to the aircraft. Kept well away from the terminal for safety." },
+  grass: { name: "Eraser (grass)", icon: "🌱", d: "Clears a square back to grass. Real runways have a wide grass strip on each side, kept clear of obstacles in case an aircraft runs off the edge." },
+};
+const AB = { grid: Array(AB_COLS * AB_ROWS).fill("grass"), tool: "runway", painting: false, raf: 0 };
+const abIdx = (r, c) => r * AB_COLS + c;
+const abAt = (r, c) => (r < 0 || c < 0 || r >= AB_ROWS || c >= AB_COLS ? null : AB.grid[abIdx(r, c)]);
+const AB_N4 = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+function abRunways() {
+  const runs = [];
+  for (let r = 0; r < AB_ROWS; r++) for (let c = 0; c < AB_COLS; c++) {
+    if (abAt(r, c) !== "runway") continue;
+    if (abAt(r, c - 1) !== "runway") { let n = 0; while (abAt(r, c + n) === "runway") n++; if (n >= 6) runs.push({ dir: "h", r, c, n }); }
+    if (abAt(r - 1, c) !== "runway") { let n = 0; while (abAt(r + n, c) === "runway") n++; if (n >= 6) runs.push({ dir: "v", r, c, n }); }
+  }
+  return runs;
+}
+const abRunTiles = (run) => Array.from({ length: run.n }, (_, i) => (run.dir === "h" ? [run.r, run.c + i] : [run.r + i, run.c]));
+// Shortest path runway → taxiways → apron (or null).
+function abRoute() {
+  const runs = abRunways(); if (!runs.length) return null;
+  const prev = new Map(), q = [];
+  runs.forEach((run) => abRunTiles(run).forEach(([r, c]) => { const k = abIdx(r, c); if (!prev.has(k)) { prev.set(k, -1); q.push([r, c]); } }));
+  while (q.length) {
+    const [r, c] = q.shift(), here = abAt(r, c);
+    for (const [dr, dc] of AB_N4) {
+      const nr = r + dr, nc = c + dc, t = abAt(nr, nc);
+      if (!t) continue;
+      const k = abIdx(nr, nc);
+      if (prev.has(k)) continue;
+      if (t === "apron" && here === "taxiway") {
+        prev.set(k, abIdx(r, c));
+        const path = []; for (let x = k; x !== -1; x = prev.get(x)) path.unshift([Math.floor(x / AB_COLS), x % AB_COLS]);
+        const run = runs.find((rn) => abRunTiles(rn).some(([a, b]) => a === path[0][0] && b === path[0][1]));
+        return { path, run };
+      }
+      if (t === "taxiway") { prev.set(k, abIdx(r, c)); q.push([nr, nc]); }
+    }
+  }
+  return null;
+}
+function abChecks() {
+  const g = AB.grid, has = (t) => g.includes(t);
+  const touches = (type, others) => g.some((t, i) => t === type && AB_N4.some(([dr, dc]) => others.includes(abAt(Math.floor(i / AB_COLS) + dr, i % AB_COLS + dc))));
+  const runs = abRunways();
+  return [
+    ["Runway at least 6 squares long", runs.length > 0],
+    ["Taxiway joining the runway to the apron", !!abRoute()],
+    ["Terminal touching the apron", touches("terminal", ["apron"])],
+    ["Hangar next to a taxiway or the apron", touches("hangar", ["apron", "taxiway"])],
+    ["Control tower", has("tower")],
+    ["Fuel farm", has("fuel")],
+    ["Bonus: a second runway pointing another way (a crosswind runway)", new Set(runs.map((r) => r.dir)).size > 1, true],
+  ];
+}
+const abNum = (run, atStart) => (run.dir === "h" ? (atStart ? "09" : "27") : (atStart ? "18" : "36"));
+function abBuild() {
+  let h = "";
+  for (let r = 0; r < AB_ROWS; r++) for (let c = 0; c < AB_COLS; c++) h += `<rect x="${c * AB_T}" y="${r * AB_T}" width="${AB_T}" height="${AB_T}" class="ab-t" id="abT${abIdx(r, c)}"/>`;
+  $("#abGrid").innerHTML = `<g>${h}</g><g id="abDeco"></g><g id="abPlane" style="display:none"><ellipse class="ab-shadow" rx="9" ry="4" cy="10"/><path class="ab-plane" d="M12 0 L-4 -2 L-6 -11 L-9 -11 L-9 -2 L-13 -2 L-15 -6 L-17 -6 L-16 0 L-17 6 L-15 6 L-13 2 L-9 2 L-9 11 L-6 11 L-4 2 Z"/></g>`;
+}
+function abRender() {
+  AB.grid.forEach((t, i) => { $("#abT" + i).setAttribute("class", "ab-t ab-" + t); });
+  const T = AB_T, ctr = (r, c) => [c * T + T / 2, r * T + T / 2];
+  let d = "";
+  // taxiway centrelines joining neighbours
+  AB.grid.forEach((t, i) => {
+    if (t !== "taxiway") return;
+    const r = Math.floor(i / AB_COLS), c = i % AB_COLS, [x, y] = ctr(r, c);
+    AB_N4.forEach(([dr, dc]) => { const n = abAt(r + dr, c + dc); if (n === "taxiway" || n === "runway" || n === "apron") d += `<line x1="${x}" y1="${y}" x2="${x + dc * T / 2}" y2="${y + dr * T / 2}" class="ab-twyline"/>`; });
+    d += `<circle cx="${x}" cy="${y}" r="1.6" class="ab-twydot"/>`;
+  });
+  // runways: centreline + numbers
+  abRunways().forEach((run) => {
+    const t = abRunTiles(run), [x1, y1] = ctr(...t[0]), [x2, y2] = ctr(...t[t.length - 1]);
+    const ux = run.dir === "h" ? 1 : 0, uy = run.dir === "v" ? 1 : 0;
+    d += `<line x1="${x1 + ux * 24}" y1="${y1 + uy * 24}" x2="${x2 - ux * 24}" y2="${y2 - uy * 24}" class="ab-cl"/>`;
+    d += `<text x="${x1 + ux * 8}" y="${y1 + uy * 8}" class="ab-num" transform="rotate(${run.dir === "h" ? 90 : 180} ${x1 + ux * 8} ${y1 + uy * 8})">${abNum(run, true)}</text>`;
+    d += `<text x="${x2 - ux * 8}" y="${y2 - uy * 8}" class="ab-num" transform="rotate(${run.dir === "h" ? -90 : 0} ${x2 - ux * 8} ${y2 - uy * 8})">${abNum(run, false)}</text>`;
+  });
+  AB.grid.forEach((t, i) => {
+    if (!["terminal", "hangar", "tower", "fuel"].includes(t)) return;
+    const [x, y] = ctr(Math.floor(i / AB_COLS), i % AB_COLS);
+    d += `<text x="${x}" y="${y}" class="ab-icon">${AB_TILES[t].icon}</text>`;
+  });
+  $("#abDeco").innerHTML = d;
+  const checks = abChecks();
+  $("#abCheck").innerHTML = checks.map(([txt, ok, bonus]) => `<li class="${ok ? "ok" : ""}${bonus ? " bonus" : ""}">${ok ? "✅" : bonus ? "⭐" : "⬜"} ${txt}</li>`).join("");
+  const stray = AB.grid.includes("runway") && !abRunways().length;
+  $("#abHint").textContent = stray ? "Runways must be straight lines at least 6 squares long." : "";
+}
+function abPalette() {
+  $("#abPalette").innerHTML = Object.entries(AB_TILES).map(([k, t]) => `<button type="button" class="chip${k === AB.tool ? " active" : ""}" data-k="${k}"><span class="ab-sw ab-${k}"></span>${t.icon} ${t.name}</button>`).join("");
+  const t = AB_TILES[AB.tool];
+  $("#abInfo").innerHTML = `<div class="label">${t.icon} ${esc(t.name)}</div><p>${t.d}</p>`;
+}
+function abCell(e) {
+  const rect = $("#abGrid").getBoundingClientRect();
+  const c = Math.floor((e.clientX - rect.left) / rect.width * AB_COLS), r = Math.floor((e.clientY - rect.top) / rect.height * AB_ROWS);
+  return r < 0 || c < 0 || r >= AB_ROWS || c >= AB_COLS ? null : abIdx(r, c);
+}
+// Paints the cell under the pointer, filling in any cells skipped since the last event (fast drags).
+function abPaint(e) {
+  const i = abCell(e); if (i === null) return;
+  const from = AB.last ?? i, r0 = Math.floor(from / AB_COLS), c0 = from % AB_COLS, r1 = Math.floor(i / AB_COLS), c1 = i % AB_COLS;
+  const n = Math.max(Math.abs(r1 - r0), Math.abs(c1 - c0));
+  let changed = false;
+  for (let k = 0; k <= n; k++) {
+    const j = abIdx(Math.round(r0 + (r1 - r0) * k / (n || 1)), Math.round(c0 + (c1 - c0) * k / (n || 1)));
+    if (AB.grid[j] !== AB.tool) { AB.grid[j] = AB.tool; changed = true; }
+  }
+  AB.last = i;
+  if (changed) abRender();
+}
+function abSave() { store.set("airportMap", AB.grid); }
+function abExample() {
+  AB.grid.fill("grass");
+  const set = (r, c, t) => { AB.grid[abIdx(r, c)] = t; };
+  for (let c = 2; c <= 17; c++) set(2, c, "runway");
+  for (let c = 3; c <= 16; c++) set(4, c, "taxiway");
+  set(3, 4, "taxiway"); set(3, 15, "taxiway");
+  for (let r = 5; r <= 7; r++) for (let c = 6; c <= 13; c++) set(r, c, "apron");
+  for (let c = 7; c <= 12; c++) set(8, c, "terminal");
+  set(5, 15, "hangar"); set(5, 16, "hangar"); set(5, 3, "tower"); set(9, 2, "fuel");
+  abRender(); abSave();
+}
+function abTest() {
+  cancelAnimationFrame(AB.raf);
+  const res = abRoute();
+  if (!res) { $("#abHint").textContent = "To test, you need a runway with a taxiway leading to the apron."; return; }
+  const T = AB_T, ctr = ([r, c]) => [c * T + T / 2, r * T + T / 2];
+  const tiles = abRunTiles(res.run), entry = res.path[0];
+  const iE = tiles.findIndex(([r, c]) => r === entry[0] && c === entry[1]);
+  const ordered = iE >= tiles.length / 2 ? tiles : tiles.slice().reverse(); // land from the far end so there's room to slow down
+  const p0 = ctr(ordered[0]), p1 = ctr(ordered[1]), ux = (p1[0] - p0[0]) / T, uy = (p1[1] - p0[1]) / T;
+  const num = res.run.dir === "h" ? (ux > 0 ? "09" : "27") : (uy > 0 ? "18" : "36");
+  // keyframes: [x, y, scale, speed(px/s) for the segment that ends here]
+  const pts = [[p0[0] - ux * 150, p0[1] - uy * 150, 1.9, 0], [p0[0] + ux * 12, p0[1] + uy * 12, 1, 170], [...ctr(entry), 1, 110], ...res.path.slice(1).map((p) => [...ctr(p), 1, 55])];
+  const plane = $("#abPlane"); plane.style.display = "";
+  let seg = 1, prog = 0, last = 0;
+  $("#abHint").textContent = `✈ Arriving on runway ${num}…`;
+  const step = (t) => {
+    const dt = last ? Math.min((t - last) / 1000, 0.05) : 0; last = t;
+    const a = pts[seg - 1], b = pts[seg], len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    prog += (b[3] * dt) / len;
+    if (prog >= 1) { prog = 0; seg++; if (seg >= pts.length) {
+      $("#abHint").textContent = `✅ Landed on runway ${num} and taxied to the apron. Your airport is open!`;
+      if (abChecks().slice(0, 6).every(([, ok]) => ok)) labAward("airport", "Opened your own airport");
+      return; } }
+    const A = pts[seg - 1], B = pts[seg], x = A[0] + (B[0] - A[0]) * prog, y = A[1] + (B[1] - A[1]) * prog, s = A[2] + (B[2] - A[2]) * prog;
+    const ang = Math.atan2(B[1] - A[1], B[0] - A[0]) * 180 / Math.PI;
+    plane.setAttribute("transform", `translate(${x} ${y}) rotate(${ang}) scale(${s})`);
+    $(".ab-shadow", plane).setAttribute("cy", 10 + (s - 1) * 30);
+    AB.raf = requestAnimationFrame(step);
+  };
+  AB.raf = requestAnimationFrame(step);
+}
+function initBuilder() {
+  const saved = store.get("airportMap", null);
+  if (Array.isArray(saved) && saved.length === AB.grid.length) AB.grid = saved.map((t) => (AB_TILES[t] ? t : "grass"));
+  abBuild(); abPalette(); abRender();
+  $("#abPalette").addEventListener("click", (e) => { const b = e.target.closest("button[data-k]"); if (b) { AB.tool = b.dataset.k; abPalette(); } });
+  const svg = $("#abGrid");
+  svg.addEventListener("pointerdown", (e) => { AB.painting = true; AB.last = null; svg.setPointerCapture(e.pointerId); $("#abPlane").style.display = "none"; cancelAnimationFrame(AB.raf); abPaint(e); });
+  svg.addEventListener("pointermove", (e) => { if (AB.painting) abPaint(e); });
+  const stop = () => { if (AB.painting) { AB.painting = false; abSave(); } };
+  svg.addEventListener("pointerup", stop); svg.addEventListener("pointercancel", stop);
+  $("#abTest").onclick = abTest;
+  $("#abExample").onclick = () => { $("#abPlane").style.display = "none"; abExample(); };
+  $("#abClear").onclick = () => { $("#abPlane").style.display = "none"; AB.grid.fill("grass"); abRender(); abSave(); };
+}
+
+// ---------- Runway Explorer ----------
+const RW_INFO = {
+  thr: ["Threshold markings ('piano keys')", "White stripes across the start of the usable runway. The number of stripes tells you how wide the runway is: 8 stripes means 30 m, 12 means 45 m."],
+  num: ["Runway number (designation)", "The runway's magnetic direction divided by 10 and rounded. This end is <b>09</b> because you land heading about 090° (east). The far end is <b>27</b> (270°, west). The two numbers always differ by 18."],
+  cl: ["Centreline", "A dashed white line down the middle. Pilots keep the nose wheel on it during takeoff and landing."],
+  tdz: ["Touchdown zone markings", "Groups of white bars every 150 m (500 ft) from the threshold, in sets of 3, then 2, then 1. They show how far down the runway you are, so you know you've touched down in time."],
+  aim: ["Aiming point", "The two big white blocks about 300 m (1,000 ft) from the threshold. This is where the glide path meets the runway, so it's the spot pilots aim for."],
+  edge: ["Runway side stripes", "Solid white lines mark the edges of the full-strength runway surface."],
+  hold: ["Runway holding position", "Two solid and two dashed yellow lines across the taxiway. Arriving from the <b>solid</b> side, you must stop here until ATC clears you onto the runway. It's one of the most important markings at any airport."],
+  twy: ["Taxiway centreline", "The yellow line aircraft follow while taxiing. The rule of thumb: runway markings are <b>white</b>, taxiway markings are <b>yellow</b>."],
+  signs: ["Airport signs", "<b>Red signs</b> with white writing are mandatory: '09-27' means a runway is just ahead. <b>Black signs</b> with yellow letters ('B') tell you which taxiway you're on. <b>Yellow signs</b> with black letters point the way to other taxiways."],
+  als: ["Approach lights", "A line of very bright lights reaching out into the approach (up to about 900 m), with crossbars. In fog they lead pilots to the runway. Many have 'rabbit' strobes that flash in sequence towards the runway."],
+  thrl: ["Threshold lights (green)", "A row of green lights across the start of the runway, meaning 'the runway starts here'."],
+  endl: ["Runway end lights (red)", "Red lights across the far end: the runway ends here. Each end really has both: green facing aircraft about to land, red facing aircraft rolling down the runway."],
+  edgel: ["Runway edge lights", "White lights along both edges. On instrument runways the last 600 m (2,000 ft) are <b>yellow</b>: a warning that the end is coming up."],
+  cll: ["Centreline lights", "Set into the runway surface itself. White at first, then alternating <b>red and white</b> for the last 900 m, and all <b>red</b> for the final 300 m."],
+  papi: ["PAPI", "Precision Approach Path Indicator: four lights beside the aiming point. <b>Two white and two red</b> means you're on the correct glide path (usually 3°). Try the PAPI simulator below."],
+  twyl: ["Taxiway lights", "Taxiway edges have <b>blue</b> lights, and many taxiways also have <b>green</b> centreline lights. Blue means taxiway, white means runway."],
+};
+const RW = { night: false, sel: null, papi: 3 };
+function rwBuild() {
+  const g = (k, cls, inner, hit) => `<g class="rw-el ${cls}" data-k="${k}">${inner}${hit ? `<rect class="rw-hit" x="${hit[0]}" y="${hit[1]}" width="${hit[2]}" height="${hit[3]}"/>` : ""}</g>`;
+  const bars = (x, w, ys) => ys.map((y) => `<rect x="${x}" y="${y}" width="${w}" height="5"/>`).join("");
+  const keysY = [104, 113, 122, 131, 164, 173, 182, 191];
+  const dots = (pts, cls) => pts.map(([x, y, c]) => `<circle cx="${x}" cy="${y}" r="3.2" class="rw-l ${c || cls}"/>`).join("");
+  const range = (a, b, s) => { const o = []; for (let v = a; v <= b; v += s) o.push(v); return o; };
+  let h = `<rect width="1000" height="300" class="rw-grass"/>
+    <path d="M640 300 L640 222 Q640 205 622 205 L708 205 Q690 205 690 222 L690 300 Z" class="rw-asphalt twy"/>
+    <rect x="80" y="95" width="840" height="110" class="rw-asphalt"/>`;
+  h += g("edge", "rw-paint", `<line x1="80" y1="99" x2="920" y2="99" class="rw-white"/><line x1="80" y1="201" x2="920" y2="201" class="rw-white"/>`, [80, 95, 840, 8]);
+  h += g("thr", "rw-paint", `<g class="rw-fill">${bars(86, 40, keysY)}${bars(874, 40, keysY)}</g>`, [84, 100, 46, 100]);
+  h += g("num", "rw-paint", `<text x="160" y="150" class="rw-num" transform="rotate(90 160 150)">09</text><text x="840" y="150" class="rw-num" transform="rotate(-90 840 150)">27</text>`, [140, 120, 40, 60]);
+  h += g("cl", "rw-paint", `<line x1="200" y1="150" x2="800" y2="150" class="rw-cl"/>`, [300, 144, 360, 12]);
+  h += g("aim", "rw-paint", `<g class="rw-fill"><rect x="250" y="106" width="44" height="14"/><rect x="250" y="180" width="44" height="14"/><rect x="706" y="106" width="44" height="14"/><rect x="706" y="180" width="44" height="14"/></g>`, [248, 104, 48, 92]);
+  const tdz = (x, n) => bars(x, 22, [108, 115, 122].slice(0, n)) + bars(x, 22, [184, 177, 170].slice(0, n));
+  h += g("tdz", "rw-paint", `<g class="rw-fill">${tdz(200, 3)}${tdz(340, 2)}${tdz(400, 1)}${tdz(778, 3)}${tdz(638, 2)}${tdz(578, 1)}</g>`, [196, 104, 230, 22]);
+  h += g("twy", "rw-paint", `<path d="M665 300 L665 222 Q665 152 600 152" class="rw-yellow"/>`, [655, 255, 20, 45]);
+  h += g("hold", "rw-paint", `<line x1="640" y1="232" x2="690" y2="232" class="rw-yellow dash"/><line x1="640" y1="237" x2="690" y2="237" class="rw-yellow dash"/><line x1="640" y1="243" x2="690" y2="243" class="rw-yellow"/><line x1="640" y1="248" x2="690" y2="248" class="rw-yellow"/>`, [638, 228, 54, 24]);
+  h += g("signs", "rw-paint", `<rect x="586" y="232" width="46" height="18" rx="2" class="rw-sign-red"/><text x="609" y="241" class="rw-signtxt">09-27</text><rect x="697" y="232" width="18" height="18" rx="2" class="rw-sign-loc"/><text x="706" y="241" class="rw-signtxt loc">B</text>`, [584, 230, 134, 22]);
+  // lights
+  h += g("als", "rw-light", dots([...range(6, 70, 8).map((x) => [x, 150]), ...range(122, 178, 8).map((y) => [38, y]), ...range(132, 168, 9).map((y) => [14, y])], "white"), [0, 118, 76, 64]);
+  h += g("thrl", "rw-light", dots(range(100, 200, 10).map((y) => [80, y]), "green"), [74, 96, 12, 108]);
+  h += g("endl", "rw-light", dots(range(100, 200, 10).map((y) => [920, y]), "red"), [914, 96, 12, 108]);
+  h += g("edgel", "rw-light", dots(range(100, 900, 40).flatMap((x) => [[x, 91, x > 780 ? "yellow" : "white"], [x, 209, x > 780 ? "yellow" : "white"]]), "white"), [96, 86, 812, 10]);
+  h += g("cll", "rw-light", dots(range(110, 900, 20).map((x, i) => [x, 156, x > 860 ? "red" : x > 760 && i % 2 ? "red" : "white"]), "white"), [100, 151, 810, 10]);
+  h += `<g class="rw-el rw-light rw-papi-g" data-k="papi">${[0, 1, 2, 3].map((i) => `<circle cx="272" cy="${84 - i * 9}" r="4" class="rw-l papi" id="rwPapiL${i}"/>`).join("")}<rect class="rw-hit" x="262" y="50" width="20" height="42"/></g>`;
+  h += g("twyl", "rw-light", dots([...range(216, 296, 20).flatMap((y) => [[636, y, "blue"], [694, y, "blue"]]), ...range(258, 296, 12).map((y) => [665, y, "green"])], "blue"), [632, 212, 66, 88]);
+  h += `<text x="12" y="20" class="rw-cap">← landing direction for runway 09 (east)  →</text><text x="988" y="20" class="rw-cap end">PAPI = the column of 4 lights above the aiming point ↓</text>`;
+  $("#rwSvg").innerHTML = h;
+}
+function rwRender() {
+  $("#rwSvg").classList.toggle("night", RW.night);
+  $$("#rwMode button").forEach((b) => b.classList.toggle("active", (b.dataset.m === "night") === RW.night));
+  $$("#rwSvg .rw-el").forEach((el) => el.classList.toggle("sel", el.dataset.k === RW.sel));
+  const it = RW_INFO[RW.sel];
+  $("#rwInfo").innerHTML = it ? `<div class="label">${esc(it[0])}</div><p>${it[1]}</p>`
+    : `<p class="sub">👆 ${RW.night ? "It's night: click any group of lights to find out what it tells pilots." : "Click any marking on the runway or taxiway. Switch to night to explore the lights."}</p>`;
+}
+function rwPapi() {
+  const a = RW.papi, angles = [2.5, 2.83, 3.17, 3.5]; // light nearest the runway has the highest setting
+  const white = angles.map((x) => a > x);
+  // lights 0 = outermost … 3 = nearest runway; in the runway picture nearest runway is drawn lowest (i = 0 → y 84)
+  [0, 1, 2, 3].forEach((i) => { const el = $("#rwPapiL" + i); if (el) el.setAttribute("class", "rw-l papi " + (white[3 - i] ? "white" : "red")); });
+  const n = white.filter(Boolean).length;
+  const k = 6, gy = 125, tx = 300, px = 140, py = gy - (tx - px) * Math.tan(a * Math.PI / 180) * k / 2.2;
+  const ideal = gy - (tx - 20) * Math.tan(3 * Math.PI / 180) * k / 2.2;
+  $("#rwPapiSvg").innerHTML = `<g>${white.map((w, i) => `<circle cx="${28 + i * 30}" cy="26" r="11" class="papi-lamp ${w ? "white" : "red"}"/>`).join("")}<text x="73" y="54" class="papi-cap">outside ⟵ ⟶ runway</text></g>
+    <line x1="10" y1="${gy}" x2="310" y2="${gy}" class="papi-ground"/><rect x="250" y="${gy - 3}" width="60" height="6" class="papi-rwy"/>
+    <line x1="20" y1="${ideal}" x2="${tx}" y2="${gy}" class="papi-ideal"/><text x="24" y="${ideal - 5}" class="papi-cap">3° glide path</text>
+    <line x1="${px}" y1="${py}" x2="${tx}" y2="${gy}" class="papi-you"/>
+    <g transform="translate(${px} ${py}) rotate(${a})"><path d="M10 0 L-8 -2 L-10 -7 L-13 -7 L-12 0 L-13 3 L-8 2 Z" class="papi-plane"/></g>`;
+  const msg = ["🔴🔴🔴🔴 <b>All red: far too low!</b> Add power and climb back up to the glide path now.", "⚪🔴🔴🔴 <b>Slightly low.</b> Ease up a little.", "⚪⚪🔴🔴 <b>Two white, two red: right on the glide path.</b> Perfect.", "⚪⚪⚪🔴 <b>Slightly high.</b> Ease down a little.", "⚪⚪⚪⚪ <b>All white: too high.</b> You'll land long, using up runway."][n];
+  $("#rwPapiTip").innerHTML = msg + ` <small>Memory aid: "white on white, you'll fly all night; red on red, you're dead."</small>`;
+  $("#rwPapiV").textContent = a.toFixed(1) + "°";
+}
+function rwCalc() {
+  const h = +$("#rwHdg").value, par = +$("#rwPar").value;
+  const num = (d) => { const n = Math.round(d / 10) % 36; return String(n === 0 ? 36 : n).padStart(2, "0"); };
+  const opp = (h + 180) % 360 || 360, n1 = num(h), n2 = num(opp);
+  const letters = par === 1 ? [""] : par === 2 ? ["L", "R"] : ["L", "C", "R"];
+  const offs = par === 1 ? [0] : par === 2 ? [-26, 26] : [-38, 0, 38];
+  const rw = offs.map((x, i) => `<rect x="${x - 8}" y="-72" width="16" height="144" class="rwc-rwy"/>
+      <text x="${x}" y="60" class="rwc-num">${n1}${letters[i]}</text>
+      <text x="${x}" y="-60" class="rwc-num" transform="rotate(180 ${x} -60)">${n2}${letters[letters.length - 1 - i]}</text>`).join("");
+  $("#rwCompass").innerHTML = `<circle r="100" class="rwc-ring"/>${["N", "E", "S", "W"].map((t, i) => `<text x="${[0, 92, 0, -92][i]}" y="${[-88, 4, 96, 4][i]}" class="rwc-dir">${t}</text>`).join("")}
+    <g transform="rotate(${h})">${rw}<path d="M0 -96 L-6 -84 L6 -84 Z" class="rwc-arrow"/></g>`;
+  $("#rwHdgV").textContent = String(h).padStart(3, "0") + "°";
+  let t = `A runway pointing <b>${String(h).padStart(3, "0")}°</b>: ${h} ÷ 10 = ${(h / 10).toFixed(1)}, rounded to <b>${n1}</b>. Use it the other way and you're heading <b>${String(opp).padStart(3, "0")}°</b>, so the far end is runway <b>${n2}</b>.`;
+  if (n1 === "36" || n2 === "36") t += " There's no runway 0, so north is always <b>36</b>.";
+  if (par > 1) t += ` With ${par} side-by-side runways, letters are added as seen by the landing pilot: <b>${letters.map((l) => n1 + l).join(", ")}</b>. From the other end, left and right swap, so ${n1}L is also ${n2}R.`;
+  $("#rwCalcOut").innerHTML = `<p>${t}</p>`;
+}
+function initRunway() {
+  rwBuild(); rwRender(); rwPapi(); rwCalc();
+  $("#rwSvg").addEventListener("click", (e) => { const el = e.target.closest(".rw-el"); RW.sel = el ? el.dataset.k : null; rwRender(); if (el) labAward("runway", "Runway explorer"); });
+  $("#rwMode").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; RW.night = b.dataset.m === "night"; RW.sel = null; rwRender(); });
+  $("#rwPapi").addEventListener("input", (e) => { RW.papi = +e.target.value; rwPapi(); });
+  $("#rwHdg").addEventListener("input", rwCalc); $("#rwPar").addEventListener("change", rwCalc);
+}
+
+// ---------- Flight Planning Room ----------
+// A fictional island group. Distances: 1 map unit = 0.6 NM.
+const FP_NM = 0.6;
+const FP_AIRPORTS = {
+  XNPT: { name: "Northport Intl", x: 120, y: 85, rwy: 3000 },
+  XWCF: { name: "Westcliff", x: 70, y: 232, rwy: 1200 },
+  XSBY: { name: "Southbay", x: 172, y: 342, rwy: 1800 },
+  XLAK: { name: "Lakeside", x: 298, y: 262, rwy: 1400 },
+  XMTN: { name: "Mountain Strip", x: 292, y: 128, rwy: 900 },
+  XEFD: { name: "Eastfield", x: 548, y: 150, rwy: 2500 },
+  XHBC: { name: "Harbour City Intl", x: 474, y: 338, rwy: 3200 },
+};
+const FP_WPTS = { GULLS: [420, 58], PEAKS: [220, 70], PINEY: [205, 196], RIVER: [392, 252], CORAL: [318, 372], SANDY: [96, 300], MISTY: [566, 258] };
+const FP_RESTRICT = [[372, 104], [466, 94], [492, 184], [398, 206]];
+const FP_TYPES = {
+  trainer: { name: "Light trainer", icon: "🛩️", spd: 110, burn: 27, cap: 115, rwy: 600, taxi: 2, reserve: 0.75, unit: "kg" },
+  turboprop: { name: "Turboprop", icon: "✈️", spd: 270, burn: 650, cap: 5000, rwy: 1300, taxi: 40, reserve: 0.5, unit: "kg" },
+  jet: { name: "Airliner jet", icon: "🛫", spd: 450, burn: 2500, cap: 20000, rwy: 2000, taxi: 200, reserve: 0.5, unit: "kg" },
+};
+const FP_STEPS = ["Departure", "Destination", "Route (waypoints)", "Alternate"];
+const FP = { type: "turboprop", dep: null, dest: null, route: [], alt: null, step: 0, wx: {}, mission: null };
+const fpPt = (id) => (FP_AIRPORTS[id] ? [FP_AIRPORTS[id].x, FP_AIRPORTS[id].y] : FP_WPTS[id]);
+const fpDist = (a, b) => { const p = fpPt(a), q = fpPt(b); return Math.hypot(p[0] - q[0], p[1] - q[1]) * FP_NM; };
+const fpHM = (h) => `${Math.floor(h)}h ${String(Math.round((h % 1) * 60)).padStart(2, "0")}m`;
+const fpKg = (v) => Math.round(v).toLocaleString("en-US");
+function fpSegHitsPoly([x1, y1], [x2, y2], poly) {
+  const cross = (ax, ay, bx, by, cx, cy) => (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+  const inside = ([px, py]) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) c = !c; } return c; };
+  if (inside([x1, y1]) || inside([x2, y2])) return true;
+  return poly.some((p, i) => { const q = poly[(i + 1) % poly.length];
+    const d1 = cross(...p, ...q, x1, y1), d2 = cross(...p, ...q, x2, y2), d3 = cross(x1, y1, x2, y2, ...p), d4 = cross(x1, y1, x2, y2, ...q);
+    return d1 * d2 < 0 && d3 * d4 < 0; });
+}
+function fpLegs() { if (!FP.dep || !FP.dest) return []; const pts = [FP.dep, ...FP.route, FP.dest]; return pts.slice(1).map((p, i) => [pts[i], p]); }
+function fpCalc() {
+  const t = FP_TYPES[FP.type], dist = fpLegs().reduce((s, [a, b]) => s + fpDist(a, b), 0), time = dist / t.spd;
+  const trip = time * t.burn, cont = trip * 0.05, altDist = FP.alt && FP.dest ? fpDist(FP.dest, FP.alt) : 0, altFuel = altDist / t.spd * t.burn, res = t.reserve * t.burn;
+  return { dist, time, trip, cont, altDist, altFuel, res, taxi: t.taxi, total: t.taxi + trip + cont + altFuel + res };
+}
+function fpChecks() {
+  const t = FP_TYPES[FP.type], c = fpCalc(), out = [];
+  out.push(["Departure and destination chosen", !!(FP.dep && FP.dest)]);
+  const short = [FP.dep, FP.dest, FP.alt].filter((a) => a && FP_AIRPORTS[a].rwy < t.rwy);
+  out.push([short.length ? `Runway too short at ${short.join(", ")} (the ${t.name.toLowerCase()} needs ${t.rwy.toLocaleString("en-US")} m)` : `Runways long enough (needs ${t.rwy.toLocaleString("en-US")} m)`, !!FP.dep && !short.length]);
+  const legs = fpLegs().concat(FP.alt && FP.dest ? [[FP.dest, FP.alt]] : []);
+  const bad = legs.some(([a, b]) => fpSegHitsPoly(fpPt(a), fpPt(b), FP_RESTRICT));
+  out.push([bad ? "Route crosses restricted area R-101: add waypoints to go around it" : "Route avoids restricted area R-101", legs.length > 0 && !bad]);
+  const altOk = FP.alt && FP.alt !== FP.dest && FP.wx[FP.alt] !== "bad";
+  out.push([FP.alt && FP.wx[FP.alt] === "bad" ? `Alternate ${FP.alt} has bad weather: choose another` : "Alternate airport chosen with good weather", !!altOk]);
+  out.push([c.total > t.cap ? `Not enough fuel: need ${fpKg(c.total)} kg, tanks hold ${fpKg(t.cap)} kg` : "Enough fuel on board", !!FP.dest && c.total <= t.cap]);
+  if (FP.mission) out.push(["Matches today's mission", FP.dep === FP.mission.dep && FP.dest === FP.mission.dest && FP.type === FP.mission.type]);
+  return out;
+}
+function fpMap() {
+  const isle = "M40 140 C40 60 150 30 260 44 C360 30 470 20 560 70 C620 110 610 210 600 260 C590 330 530 380 440 384 C350 400 250 400 160 386 C80 374 30 320 34 240 Z";
+  const legs = fpLegs().map(([a, b]) => { const [x1, y1] = fpPt(a), [x2, y2] = fpPt(b); return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="fp-leg"/>`; }).join("");
+  const altLeg = FP.alt && FP.dest ? (() => { const [x1, y1] = fpPt(FP.dest), [x2, y2] = fpPt(FP.alt); return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="fp-leg alt"/>`; })() : "";
+  const legLabels = fpLegs().map(([a, b]) => { const [x1, y1] = fpPt(a), [x2, y2] = fpPt(b); return `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 5}" class="fp-dist">${Math.round(fpDist(a, b))} NM</text>`; }).join("");
+  const role = (id) => (id === FP.dep ? "dep" : id === FP.dest ? "dest" : id === FP.alt ? "alt" : "");
+  const aps = Object.entries(FP_AIRPORTS).map(([id, a]) => { const r = role(id), wx = FP.wx[id];
+    return `<g class="fp-ap ${r}" data-ap="${id}" transform="translate(${a.x} ${a.y})"><circle r="15" class="fp-hit"/><circle r="8" class="fp-ring"/><line x1="-12" y1="7" x2="12" y2="-7" class="fp-rwy"/>
+      <text y="-14" class="fp-code">${id}</text><text y="22" class="fp-apname">${esc(a.name)} · ${a.rwy.toLocaleString("en-US")} m</text>
+      ${wx === "bad" ? `<text x="13" y="-2" class="fp-wx">🌫️</text>` : wx === "marginal" ? `<text x="13" y="-2" class="fp-wx">🌥️</text>` : ""}
+      ${r ? `<text x="-13" y="-2" class="fp-tag">${{ dep: "DEP", dest: "DEST", alt: "ALTN" }[r]}</text>` : ""}<title>${id} ${a.name}: runway ${a.rwy} m</title></g>`; }).join("");
+  const wps = Object.entries(FP_WPTS).map(([id, [x, y]]) => `<g class="fp-wp${FP.route.includes(id) ? " on" : ""}" data-wp="${id}" transform="translate(${x} ${y})"><circle r="12" class="fp-hit"/><path d="M0 -6 L6 5 L-6 5 Z"/><text y="17" class="fp-wpname">${id}</text><title>Waypoint ${id}</title></g>`).join("");
+  $("#fpMap").innerHTML = `<rect width="640" height="420" class="fp-sea"/><path d="${isle}" class="fp-land"/>
+    <path d="M250 150 L270 112 L290 150 Z M276 154 L300 104 L322 154 Z M304 160 L322 128 L340 160 Z" class="fp-mtn"/>
+    <polygon points="${FP_RESTRICT.map((p) => p.join(",")).join(" ")}" class="fp-restrict"/><text x="432" y="146" class="fp-rlabel">R-101</text><text x="432" y="158" class="fp-rlabel small">military · active</text>
+    ${altLeg}${legs}${legLabels}${wps}${aps}
+    <g transform="translate(600 30)"><path d="M0 -14 L5 4 L0 0 L-5 4 Z" class="fp-north"/><text y="18" class="fp-code">N</text></g>
+    <text x="16" y="408" class="fp-scale">Fictional map · 100 NM ⟷</text><line x1="150" y1="404" x2="${150 + 100 / FP_NM}" y2="404" class="fp-scalebar"/>`;
+}
+function fpRender() {
+  fpMap();
+  $$("#fpType button").forEach((b) => b.classList.toggle("active", b.dataset.t === FP.type));
+  $("#fpSteps").innerHTML = FP_STEPS.map((s, i) => `<button type="button" class="${i === FP.step ? "on" : ""}${[FP.dep, FP.dest, FP.route.length, FP.alt][i] ? " done" : ""}" data-s="${i}">${i + 1}. ${s}</button>`).join("") +
+    (FP.step === 2 ? `<button type="button" class="next" data-s="3">Route done → pick alternate</button>` : "");
+  $("#fpHint").textContent = ["Click an airport to depart from.", "Click your destination airport.", "Click waypoints (triangles) in order to build your route. Straight lines between points are 'direct' (DCT).", "Click an airport to use as your alternate if you can't land at the destination."][FP.step];
+  const checks = fpChecks(), ok = checks.every(([, v]) => v);
+  $("#fpChecks").innerHTML = checks.map(([t, v]) => `<li class="${v ? "ok" : ""}">${v ? "✅" : "⬜"} ${esc(t)}</li>`).join("") + (ok ? `<li class="ok approved">🟢 Flight plan approved. Have a good flight!</li>` : "");
+  if (ok) labAward("plan", "Flight plan approved");
+  const t = FP_TYPES[FP.type], c = fpCalc();
+  const route = FP.route.length ? `DCT ${FP.route.join(" DCT ")} DCT` : FP.dest ? "DCT (direct)" : "–";
+  const row = (k, v, cls = "") => `<tr class="${cls}"><th>${k}</th><td>${v}</td></tr>`;
+  $("#fpStrip").innerHTML = `<table>${row("Aircraft", `${t.icon} ${t.name} · ${t.spd} kt`)}${row("From", FP.dep ? `${FP.dep} ${esc(FP_AIRPORTS[FP.dep].name)}` : "–")}${row("Route", route)}${row("To", FP.dest ? `${FP.dest} ${esc(FP_AIRPORTS[FP.dest].name)}` : "–")}${row("Alternate", FP.alt ? `${FP.alt} (${Math.round(c.altDist)} NM)` : "–")}
+    ${row("Distance", FP.dest ? `${Math.round(c.dist)} NM` : "–")}${row("Flight time", FP.dest ? fpHM(c.time) : "–")}</table>
+    <table class="fp-fuel">${row("Trip fuel", fpKg(c.trip) + " kg")}${row("Contingency 5%", fpKg(c.cont) + " kg")}${row("Alternate", fpKg(c.altFuel) + " kg")}${row(`Final reserve (${t.reserve * 60} min)`, fpKg(c.res) + " kg")}${row("Taxi", fpKg(c.taxi) + " kg")}
+    ${row("Total needed", `${fpKg(c.total)} / ${fpKg(t.cap)} kg`, c.total > t.cap ? "over" : "total")}</table>`;
+}
+function fpClick(e) {
+  const ap = e.target.closest("[data-ap]"), wp = e.target.closest("[data-wp]");
+  if (wp) { const id = wp.dataset.wp; if (FP.route[FP.route.length - 1] !== id) FP.route.push(id); FP.step = 2; }
+  else if (ap) {
+    const id = ap.dataset.ap;
+    if (FP.step === 0) { FP.dep = id; if (FP.dest === id) FP.dest = null; FP.step = FP.dest ? 2 : 1; }
+    else if (FP.step === 1) { if (id === FP.dep) { $("#fpHint").textContent = "Pick a different airport from your departure."; return; } FP.dest = id; FP.step = 2; }
+    else if (FP.step === 2) { $("#fpHint").textContent = "You're building the route, so click waypoints (triangles). Press 'Route done' to choose your alternate."; return; }
+    else { if (id === FP.dest) { $("#fpHint").textContent = "The alternate has to be a different airport from your destination."; return; } FP.alt = id; }
+  } else return;
+  fpRender();
+}
+function fpNewMission() {
+  const ids = Object.keys(FP_AIRPORTS), types = Object.keys(FP_TYPES);
+  for (let tries = 0; tries < 200; tries++) {
+    const type = types[Math.random() * types.length | 0], t = FP_TYPES[type];
+    const ok = ids.filter((i) => FP_AIRPORTS[i].rwy >= t.rwy);
+    const dep = ok[Math.random() * ok.length | 0], dest = ok[Math.random() * ok.length | 0];
+    if (dep === dest || fpDist(dep, dest) < 120) continue;
+    // fog at the airport nearest the destination (other than dep) makes the alternate choice matter
+    const near = ids.filter((i) => i !== dest && i !== dep).sort((a, b) => fpDist(dest, a) - fpDist(dest, b))[0];
+    // make sure it's flyable: 25% extra distance for detours plus fuel to the nearest usable alternate
+    const altD = Math.min(...ids.filter((i) => i !== dest && i !== near && FP_AIRPORTS[i].rwy >= t.rwy).map((i) => fpDist(dest, i)));
+    const need = t.taxi + fpDist(dep, dest) * 1.25 / t.spd * t.burn * 1.05 + altD / t.spd * t.burn + t.reserve * t.burn;
+    if (need > t.cap * 0.95) continue;
+    Object.assign(FP, { type, dep: null, dest: null, route: [], alt: null, step: 0, wx: { [near]: "bad", [dest]: "marginal" }, mission: { type, dep, dest } });
+    $("#fpMissionText").innerHTML = `📋 <b>Mission:</b> fly the <b>${t.name.toLowerCase()}</b> from <b>${dep} ${FP_AIRPORTS[dep].name}</b> to <b>${dest} ${FP_AIRPORTS[dest].name}</b>. The forecast at ${dest} is marginal (🌥️), so you need an alternate, and <b>${near}</b> is fogged in (🌫️). Military area R-101 is active.`;
+    fpRender(); return;
+  }
+}
+const FP_TERMS = [
+  ["Departure", "The airport you leave from. Pilots check its runway, weather, and any NOTAMs (notices about closures or hazards) before going."],
+  ["Destination", "Where you plan to land. Its runway must be long enough for your aircraft, and its weather must be good enough to land."],
+  ["Route", "The path between the two. Real flights follow airways (motorways in the sky) or fly 'direct' (DCT) between points, avoiding restricted airspace."],
+  ["Waypoints", "Named points in the sky, usually five letters like GULLS. A route is a list of waypoints, which makes it easy to tell ATC exactly where you're going."],
+  ["Alternate airport", "A backup airport, chosen before departure, in case you can't land at the destination (weather, a blocked runway). You must carry fuel to get there."],
+  ["Fuel planning", "Trip fuel + a little extra (contingency) + fuel to reach the alternate + a final reserve (30–45 min) + taxi. Running short is never an option."],
+];
+function initPlanning() {
+  $("#fpType").innerHTML = Object.entries(FP_TYPES).map(([k, t]) => `<button type="button" data-t="${k}">${t.icon} ${t.name}</button>`).join("");
+  $("#fpType").addEventListener("click", (e) => { const b = e.target.closest("button[data-t]"); if (b) { FP.type = b.dataset.t; fpRender(); } });
+  $("#fpSteps").addEventListener("click", (e) => { const b = e.target.closest("button[data-s]"); if (b) { FP.step = +b.dataset.s; fpRender(); } });
+  $("#fpMap").addEventListener("click", fpClick);
+  $("#fpUndo").onclick = () => { FP.route.pop(); fpRender(); };
+  $("#fpReset").onclick = () => { Object.assign(FP, { dep: null, dest: null, route: [], alt: null, step: 0 }); fpRender(); };
+  $("#fpMission").onclick = fpNewMission;
+  $("#fpTerms").innerHTML = FP_TERMS.map(([h, p]) => `<div><h5>${h}</h5><p>${p}</p></div>`).join("");
+  $("#fpMissionText").innerHTML = "Free planning: pick anything you like, or press <b>🎲 New mission</b> for a challenge.";
+  fpRender();
+}
+
+// ---------- Ground Operations (turnaround) ----------
+const GO_TASKS = [
+  { id: "chocks", name: "Chocks & cones", icon: "👷", s: 0, e: 2, who: "Ramp crew", d: "As soon as the engines stop, wheel chocks go in and safety cones go around the wingtips and engines. Nobody approaches the aircraft until the anti-collision beacon is off." },
+  { id: "gpu", name: "Ground power", icon: "🔌", s: 1, e: 41, who: "Ramp crew", d: "A ground power unit (GPU) plugs into the nose to power the lights, air-con, and computers, so the aircraft doesn't need to run its noisy, fuel-hungry APU (a small engine in the tail)." },
+  { id: "bridge", name: "Jet bridge", icon: "🌉", s: 1, e: 41, who: "Bridge operator", d: "The air bridge drives up to the front left door. Passengers always use the <b>left</b> side, leaving the right side free for service vehicles." },
+  { id: "deboard", name: "Passengers off", icon: "🚶", s: 2, e: 12, who: "Cabin crew", d: "Up to ~180 passengers leave through the front door in about 10 minutes." },
+  { id: "unload", name: "Unload bags & cargo", icon: "🧳", s: 3, e: 15, who: "Baggage handlers", d: "Belt loaders carry bags out of the cargo holds (under the floor) onto baggage carts, which tug them to the terminal." },
+  { id: "maint", name: "Engineer walk-around", icon: "🧑‍🔧", s: 4, e: 28, who: "Maintenance engineer", d: "An engineer walks around the aircraft checking tyres, brakes, engines, and for leaks or damage, fixes any defects the pilots reported, and signs the technical log." },
+  { id: "fuel", name: "Refuelling", icon: "⛽", s: 8, e: 25, who: "Fuel crew", d: "Fuel comes through a panel under the <b>right</b> wing. If passengers are on board during fuelling, the cabin crew must keep exits ready and the fire service is told." },
+  { id: "water", name: "Water & toilets", icon: "💧", s: 10, e: 20, who: "Service crew", d: "Fresh drinking water is topped up and the toilet tanks are emptied, from service panels underneath." },
+  { id: "clean", name: "Cabin cleaning", icon: "🧹", s: 12, e: 24, who: "Cleaning crew", d: "Seat pockets emptied, rubbish collected, toilets cleaned, seatbelts crossed. On short turnarounds the cabin crew often help." },
+  { id: "cater", name: "Catering", icon: "🍱", s: 12, e: 26, who: "Catering crew", d: "A high-lift truck raises its box to the right rear door to swap used trolleys for fresh food and drinks." },
+  { id: "load", name: "Load bags & cargo", icon: "📦", s: 17, e: 38, who: "Baggage handlers", d: "New bags are loaded in a planned order. Where heavy items go affects the aircraft's balance (centre of gravity)." },
+  { id: "board", name: "Passengers board", icon: "🎫", s: 25, e: 39, who: "Gate agents & cabin crew", d: "Boarding by group or zone. Gate agents count passengers so the numbers match the load sheet." },
+  { id: "docs", name: "Load sheet", icon: "📋", s: 35, e: 41, who: "Dispatcher / load controller", d: "The final load sheet (passengers, bags, cargo, fuel, and balance) is sent to the pilots. The captain checks and signs it before departure." },
+  { id: "doors", name: "Doors closed", icon: "🚪", s: 40, e: 42, who: "Cabin crew", d: "All doors closed and 'armed' (so the escape slides inflate if opened in an emergency), and the bridge pulls back." },
+  { id: "push", name: "Pushback", icon: "🚜", s: 42, e: 45, who: "Tug driver & headset operator", d: "Airliners can't reverse on their own at the gate, so a tug pushes the aircraft back. The headset operator talks to the pilots throughout." },
+];
+// Vehicles: where they park (x, y), where they drive in from (dx, dy), and which tasks they serve.
+const GO_VEH = [
+  { tasks: ["chocks"], x: 296, y: 120, icon: "👷", label: "Chocks", box: false },
+  { tasks: ["gpu"], x: 362, y: 74, dx: 120, dy: 0, icon: "🔌", label: "GPU", cable: [338, 80] },
+  { tasks: ["unload", "load"], x: 372, y: 140, dx: 160, dy: 0, icon: "🧳", label: "Belt loader", w: 46, rot: -20, belt: true },
+  { tasks: ["unload", "load"], x: 372, y: 262, dx: 160, dy: 0, icon: "🧳", label: "Belt loader", w: 46, rot: 20, belt: true },
+  { tasks: ["unload", "load"], x: 436, y: 126, dx: 140, dy: 0, icon: "🛒", label: "Bag carts", w: 54 },
+  { tasks: ["fuel"], x: 450, y: 192, dx: 160, dy: 0, icon: "⛽", label: "Fuel truck", w: 56, cable: [416, 214] },
+  { tasks: ["cater"], x: 374, y: 304, dx: 150, dy: 40, icon: "🍱", label: "Catering", w: 44 },
+  { tasks: ["water"], x: 268, y: 338, dx: -150, dy: 40, icon: "💧", label: "Water/toilet", w: 46 },
+  { tasks: ["clean"], x: 320, y: 168, icon: "🧹", label: "", box: false, inside: true },
+  { tasks: ["clean"], x: 320, y: 232, icon: "🧹", label: "", box: false, inside: true },
+  { tasks: ["docs"], x: 268, y: 64, dx: -80, dy: 0, icon: "📋", label: "Ramp agent", box: false },
+  { tasks: ["push", "doors"], x: 320, y: 46, dx: -150, dy: -10, icon: "🚜", label: "Tug", w: 36 },
+];
+const GO = { t: 0, playing: false, speed: 1, sel: null, raf: 0, last: 0, lastKey: "" };
+const goActive = (t) => GO_TASKS.filter((k) => t >= k.s && t < k.e);
+function goBuild() {
+  const veh = GO_VEH.map((v, i) => `<g class="go-v" id="goV${i}" data-task="${v.tasks[0]}">${v.cable ? `<line class="go-cable" x1="0" y1="0" x2="${v.cable[0] - v.x}" y2="${v.cable[1] - v.y}"/>` : ""}
+      ${v.box === false ? "" : `<rect x="${-(v.w || 30) / 2}" y="-11" width="${v.w || 30}" height="22" rx="4" class="go-body" transform="rotate(${v.rot || 0})"/>`}
+      <text class="go-ico">${v.icon}</text>${v.label ? `<text y="${v.box === false ? 18 : 24}" class="go-vlbl">${v.label}</text>` : ""}</g>`).join("");
+  $("#goApron").innerHTML = `<rect width="640" height="420" class="go-ground"/>
+    <rect width="640" height="40" class="go-terminal"/>${Array.from({ length: 16 }, (_, i) => `<rect x="${12 + i * 40}" y="10" width="26" height="14" rx="2" class="go-window"/>`).join("")}<text x="560" y="34" class="go-vlbl term">TERMINAL · GATE 7</text>
+    <line x1="320" y1="40" x2="320" y2="420" class="go-leadin"/><line x1="200" y1="392" x2="440" y2="392" class="go-stopbar"/>
+    <g id="goBridge"><rect class="go-bridge" x="0" y="-9" height="18" rx="3"/><rect class="go-cab" y="-12" width="14" height="24" rx="2"/></g>
+    <g id="goPlane">
+      <path class="go-wing" d="M302 170 L168 232 L168 246 L302 214 Z M338 170 L472 232 L472 246 L338 214 Z"/>
+      <rect class="go-eng" x="216" y="200" width="16" height="30" rx="6"/><rect class="go-eng" x="408" y="200" width="16" height="30" rx="6"/>
+      <path class="go-wing" d="M302 318 L262 348 L262 356 L302 344 Z M338 318 L378 348 L378 356 L338 344 Z"/>
+      <path class="go-fuse" d="M320 64 C333 64 338 82 338 102 L338 322 C338 340 330 352 320 362 C310 352 302 340 302 322 L302 102 C302 82 307 64 320 64 Z"/>
+      <path class="go-cockpit" d="M312 80 Q320 72 328 80 L326 86 L314 86 Z"/>
+      ${[100, 300].flatMap((y) => [[300, y], [340, y]]).map(([x, y]) => `<rect class="go-door" x="${x - 2}" y="${y - 6}" width="4" height="12"/>`).join("")}
+      <g id="goPax"></g>
+    </g>
+    <g id="goVehs">${veh}</g>
+    <g id="goCones">${[[160, 250], [480, 250], [320, 372], [224, 238], [416, 238]].map(([x, y]) => `<path d="M${x} ${y - 7} L${x + 5} ${y + 4} L${x - 5} ${y + 4} Z" class="go-cone"/>`).join("")}</g>`;
+  $("#goGantt").innerHTML = `<div class="go-axis">${[0, 10, 20, 30, 40, 45].map((m) => `<span style="left:${m / 45 * 100}%">${m}′</span>`).join("")}</div>` +
+    GO_TASKS.map((k) => `<button type="button" class="go-row" data-id="${k.id}"><span class="go-name">${k.icon} ${k.name}</span><span class="go-track"><i style="left:${k.s / 45 * 100}%;width:${(k.e - k.s) / 45 * 100}%"></i></span></button>`).join("") +
+    `<div class="go-cursor" id="goCursor"></div>`;
+}
+const goEase = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : 1 - (1 - x) ** 3);
+function goRender() {
+  const t = GO.t;
+  // vehicle presence: union of their tasks, sliding in/out over ~1.2 min
+  GO_VEH.forEach((v, i) => {
+    const ks = GO_TASKS.filter((k) => v.tasks.includes(k.id)), s = Math.min(...ks.map((k) => k.s)), e = Math.max(...ks.map((k) => k.e));
+    const p = Math.min(goEase((t - s) / 1.2), goEase((e - t) / 1.2)), el = $("#goV" + i);
+    el.style.opacity = p > 0.02 ? 1 : 0;
+    el.setAttribute("transform", `translate(${v.x + (1 - p) * (v.dx || 0)} ${v.y + (1 - p) * (v.dy || 0)})`);
+    el.classList.toggle("sel", !!GO.sel && v.tasks.includes(GO.sel));
+  });
+  // engineer walks around the aircraft during the check
+  const m = GO_TASKS.find((k) => k.id === "maint"), mp = (t - m.s) / (m.e - m.s);
+  const loop = [[290, 120], [230, 236], [180, 252], [290, 330], [350, 330], [460, 252], [410, 236], [350, 120], [290, 120]];
+  let eng = $("#goEngineer");
+  if (!eng) { eng = document.createElementNS(SVGNS, "text"); eng.id = "goEngineer"; eng.setAttribute("class", "go-ico walker"); eng.textContent = "🧑‍🔧"; eng.dataset.task = "maint"; $("#goVehs").appendChild(eng); }
+  eng.style.opacity = mp > 0 && mp < 1 ? 1 : 0;
+  if (mp > 0 && mp < 1) { const f = mp * (loop.length - 1), i = Math.floor(f), q = f - i, a = loop[i], b = loop[i + 1]; eng.setAttribute("x", a[0] + (b[0] - a[0]) * q); eng.setAttribute("y", a[1] + (b[1] - a[1]) * q); }
+  // jet bridge extends to the front-left door while attached
+  const bk = GO_TASKS.find((k) => k.id === "bridge"), bp = Math.min(goEase((t - bk.s) / 1), goEase((bk.e - t) / 1));
+  const len = 40 + bp * 115;
+  $("#goBridge").setAttribute("transform", `translate(156 40) rotate(23.6)`); $(".go-bridge").setAttribute("width", len); $(".go-cab").setAttribute("x", len - 6);
+  // passengers walking along the bridge
+  const dpx = GO_TASKS.find((k) => k.id === "deboard"), bpx = GO_TASKS.find((k) => k.id === "board");
+  const walking = t >= dpx.s && t < dpx.e ? -1 : t >= bpx.s && t < bpx.e ? 1 : 0;
+  $("#goPax").innerHTML = walking ? Array.from({ length: 5 }, (_, i) => { let f = ((t * 3 + i / 5) % 1); if (walking < 0) f = 1 - f; const x = 168 + f * 126, y = 45 + f * 55; return `<circle cx="${x}" cy="${y}" r="2.6" class="go-pax"/>`; }).join("") : "";
+  // pushback: aircraft and tug back away from the gate and turn
+  const pk = GO_TASKS.find((k) => k.id === "push"), pp = goEase((t - pk.s) / (pk.e - pk.s) * 1.05);
+  const tf = pp > 0 ? `translate(${pp * 30} ${pp * 70}) rotate(${pp * 25} 320 200)` : "";
+  $("#goPlane").setAttribute("transform", tf);
+  const tug = $("#goV" + GO_VEH.findIndex((v) => v.tasks[0] === "push"));
+  if (pp > 0) tug.setAttribute("transform", `${tf} translate(320 46)`);
+  $("#goCones").style.opacity = t > 0.3 && t < 41 ? 1 : 0;
+  // gantt + clock
+  $("#goCursor").style.left = `calc(var(--go-label) + (100% - var(--go-label)) * ${t / 45})`;
+  const act = goActive(t), key = act.map((k) => k.id).join();
+  $$("#goGantt .go-row").forEach((r) => { r.classList.toggle("on", act.some((k) => k.id === r.dataset.id)); r.classList.toggle("sel", r.dataset.id === GO.sel); });
+  $("#goClock").textContent = `${String(Math.floor(t)).padStart(2, "0")}:${String(Math.floor((t % 1) * 60)).padStart(2, "0")}`;
+  $("#goTime").value = t;
+  if (key !== GO.lastKey || GO.forceInfo) { GO.lastKey = key; GO.forceInfo = false; goInfo(act); }
+}
+function goInfo(act) {
+  const k = GO_TASKS.find((x) => x.id === GO.sel);
+  const now = act.length ? act.map((x) => `<span class="chip">${x.icon} ${x.name}</span>`).join("") : `<span class="sub">${GO.t >= 45 ? "✈ Gone! On to the next flight." : "Waiting for the aircraft to park…"}</span>`;
+  $("#goInfo").innerHTML = (k ? `<div class="label">${k.icon} ${esc(k.name)}</div><p class="go-when">⏱ minute ${k.s}–${k.e} · 👤 ${esc(k.who)}</p><p>${k.d}</p>` : `<div class="label">Turnaround</div><p>Click a vehicle or a task in the timeline below to learn what it does. Lots of jobs happen <b>at the same time</b>: that's how airlines keep turnarounds short.</p>`) +
+    `<div class="label">Happening now</div><div class="chips">${now}</div>`;
+}
+function goLoop(ts) {
+  if (!GO.playing) return;
+  if (!$("#tool-ground").offsetParent) { goPause(); return; } // (SVG elements have no offsetParent, so check the panel)
+  const dt = GO.last ? Math.min((ts - GO.last) / 1000, 0.1) : 0; GO.last = ts;
+  GO.t = Math.min(45, GO.t + dt * GO.speed);
+  goRender();
+  if (GO.t >= 45) { goPause(); labAward("turnaround", "Watched a full turnaround"); return; }
+  GO.raf = requestAnimationFrame(goLoop);
+}
+function goPause() { GO.playing = false; cancelAnimationFrame(GO.raf); $("#goPlay").textContent = GO.t >= 45 ? "↺ Replay" : "▶ Play"; }
+const GO_ORDER = ["Chocks on, engines off", "Passengers get off", "Bags unloaded", "Cabin cleaned & catering loaded", "New bags loaded", "Passengers board", "Doors closed", "Pushback"];
+const GO_Q = { next: 0, opts: [], tries: 0 };
+function goOrderRender(msg = "") {
+  const done = GO_ORDER.slice(0, GO_Q.next);
+  $("#goOrder").innerHTML = `<p class="sub">Click the steps in the order they happen. (Fuelling isn't here because it can happen alongside other jobs.)</p>
+    <ol class="go-done">${done.map((d) => `<li>${esc(d)}</li>`).join("")}</ol>
+    ${GO_Q.next < GO_ORDER.length ? `<div class="chips">${GO_Q.opts.filter((o) => !done.includes(o)).map((o) => `<button type="button" class="chip" data-o="${esc(o)}">${esc(o)}</button>`).join("")}</div>` : `<p class="tip">🎉 Perfect turnaround order${GO_Q.tries ? ` (${GO_Q.tries} wrong guess${GO_Q.tries > 1 ? "es" : ""})` : " on the first try"}! <button type="button" class="btn ghost" id="goOrderAgain">Try again</button></p>`}
+    ${msg ? `<p class="go-msg">${msg}</p>` : ""}`;
+}
+function initGround() {
+  goBuild(); goRender();
+  $("#goPlay").onclick = () => {
+    if (GO.playing) { goPause(); return; }
+    if (GO.t >= 45) GO.t = 0;
+    GO.playing = true; GO.last = 0; $("#goPlay").textContent = "⏸ Pause"; GO.raf = requestAnimationFrame(goLoop);
+  };
+  $("#goSpeed").addEventListener("click", (e) => { const b = e.target.closest("button[data-s]"); if (!b) return; GO.speed = +b.dataset.s; $$("#goSpeed button").forEach((x) => x.classList.toggle("active", x === b)); });
+  $("#goTime").addEventListener("input", (e) => { GO.t = +e.target.value; goRender(); });
+  const pick = (id) => { GO.sel = GO.sel === id ? null : id; GO.forceInfo = true; goRender(); };
+  $("#goGantt").addEventListener("click", (e) => { const r = e.target.closest(".go-row"); if (r) pick(r.dataset.id); });
+  $("#goApron").addEventListener("click", (e) => { const v = e.target.closest("[data-task]"); if (v) pick(v.dataset.task); });
+  GO_Q.opts = shuffle(GO_ORDER); goOrderRender();
+  $("#goOrder").addEventListener("click", (e) => {
+    if (e.target.id === "goOrderAgain") { GO_Q.next = 0; GO_Q.tries = 0; GO_Q.opts = shuffle(GO_ORDER); goOrderRender(); return; }
+    const b = e.target.closest("button[data-o]"); if (!b) return;
+    if (b.dataset.o === GO_ORDER[GO_Q.next]) { GO_Q.next++; goOrderRender(GO_Q.next === GO_ORDER.length ? "" : "✅ Correct!"); if (GO_Q.next === GO_ORDER.length) labAward("turnorder", "Turnaround in order"); }
+    else { GO_Q.tries++; goOrderRender(`❌ Not yet. What has to happen before “${esc(b.dataset.o)}”?`); }
+  });
+}
+
+// ---------- Airport Roles ----------
+const RL_ROLES = {
+  pilot: { name: "Pilots", sub: "Captain & first officer", icon: "🧑‍✈️", short: "Fly the aircraft and are responsible for its safety.", where: "Flight deck", tools: "Flight plan, weather reports, checklists, radios, autopilot", talks: "Dispatchers, air traffic control, engineers, cabin crew", become: "Flight school to a commercial pilot licence, then airline training and a 'type rating' for each aircraft. Airline captains in many countries need around 1,500 flying hours or more.", fact: "The captain has final authority. The two pilots usually take turns being 'pilot flying' and 'pilot monitoring'.", clue: "I share the flight deck with a colleague, and we take turns being 'pilot flying' and 'pilot monitoring'." },
+  cabin: { name: "Cabin crew", sub: "Flight attendants", icon: "💁", short: "Keep passengers safe and looked after.", where: "Cabin", tools: "Safety equipment, interphone, first-aid kit, fire extinguishers", talks: "Pilots, gate agents, catering", become: "Several weeks of airline training in evacuation, firefighting, first aid, and service, refreshed every year.", fact: "Their main job is safety, not serving drinks: they're trained to evacuate a full aircraft in 90 seconds.", clue: "My most important job is getting everyone out in 90 seconds if something goes wrong." },
+  dispatch: { name: "Flight dispatcher", sub: "Airline operations", icon: "🖥️", short: "Plans each flight and watches it from the ground.", where: "Airline operations centre", tools: "Flight-planning software, weather data, performance charts", talks: "Pilots, meteorologists, crew scheduling, maintenance control", become: "A dispatcher licence (in the US an FAA certificate) or airline flight-operations training.", fact: "In some countries the captain and dispatcher share responsibility: both must agree the flight is safe before it goes.", clue: "I build the flight plan (route, fuel, and alternates) and follow the flight from an operations centre." },
+  ground: { name: "Ground controller", sub: "Air traffic control", icon: "🎧", short: "Directs aircraft and vehicles on the taxiways.", where: "Control tower", tools: "Radio, surface movement radar, the view from the tower", talks: "Pilots, tower controller, vehicle drivers", become: "Air traffic control academy, then months of on-the-job training at a specific airport.", fact: "Gives instructions like 'taxi to holding point runway 27 via Bravo' and keeps everything apart on the ground.", clue: "I tell aircraft which taxiways to use to get to the runway." },
+  tower: { name: "Tower controller", sub: "Air traffic control", icon: "🗼", short: "Clears aircraft to take off and land.", where: "Top of the control tower", tools: "Radio, binoculars, signal light gun, runway lighting controls", talks: "Pilots, ground and approach controllers", become: "Air traffic control academy plus airport-specific training and a licence.", fact: "Owns the runway: nothing goes on it without the tower's permission.", clue: "Nothing goes on the runway without my permission." },
+  radar: { name: "Approach & area controllers", sub: "Air traffic control", icon: "📡", short: "Guide aircraft through the sky on radar.", where: "Radar centre (often far from the airport)", tools: "Radar screens, radio, electronic flight strips", talks: "Pilots, tower, neighbouring control centres", become: "Air traffic control academy, then a radar rating for their sector.", fact: "Approach controllers line aircraft up for landing; area controllers look after cruising aircraft across huge regions.", clue: "I watch a radar screen and keep cruising aircraft safely apart." },
+  engineer: { name: "Maintenance engineer", sub: "Licensed engineer", icon: "🧑‍🔧", short: "Inspect, repair, and certify aircraft as safe to fly.", where: "Ramp and hangar", tools: "Technical log, maintenance manuals, tools, diagnostic computers", talks: "Pilots, maintenance control, dispatchers", become: "An aircraft maintenance licence (several years of study and experience) plus ratings for each aircraft type.", fact: "The aircraft can't leave until a licensed engineer signs that it's airworthy.", clue: "The aircraft can't leave until I sign to say it's safe to fly." },
+  ramp: { name: "Ramp agents & ground crew", sub: "Ground handling", icon: "🦺", short: "Load bags, guide aircraft in, and push them back.", where: "Apron (ramp)", tools: "Belt loaders, tugs, marshalling wands, headsets", talks: "Pilots (by headset), load control, other ground teams", become: "Airport training in apron driving, loading, safety, and marshalling.", fact: "At pushback, the headset operator talks directly to the pilots while the tug pushes the aircraft back.", clue: "I wear a headset at pushback and talk to the pilots while the tug pushes them back." },
+  ops: { name: "Airport operations", sub: "Airside operations officer", icon: "🚙", short: "Keep the airport itself safe and running.", where: "Airside, in a yellow ops vehicle", tools: "Inspection vehicle, radio, runway friction tester, bird-scaring kit", talks: "Tower, fire and rescue, airport maintenance, airlines", become: "Aviation operations or airport management training, plus airside driving permits.", fact: "They inspect the runways several times a day for debris (FOD), damage, wildlife, and snow.", clue: "I drive along the runways several times a day looking for debris and wildlife." },
+};
+const RL_PHASES = [
+  { id: "plan", name: "📝 Planning", d: "Hours before departure: the flight is planned and the aircraft prepared.", who: {
+    pilot: "Read the flight plan, weather, and NOTAMs, and agree the fuel with dispatch.", dispatch: "Builds the flight plan: route, fuel, weights, and alternate airports.", engineer: "Checks the technical log and fixes open defects from earlier flights.", ops: "Inspects runways and taxiways and publishes any closures as NOTAMs.", cabin: "Briefing with the captain: flight time, weather, special passengers." } },
+  { id: "gate", name: "🧳 At the gate", d: "The 45-minute turnaround: unloading, fuelling, cleaning, boarding.", who: {
+    pilot: "Walk-around, cockpit set-up, and loading the route into the flight computer.", cabin: "Safety checks, then welcome passengers on board.", engineer: "Walk-around check, then signs the aircraft off as safe to fly.", ramp: "Unload and load bags, and connect ground power. Fuel and catering trucks arrive.", dispatch: "Sends the final load sheet (weights and balance) to the pilots.", ground: "The route clearance is read out to the pilots (at big airports a 'clearance delivery' controller does this)." } },
+  { id: "taxi", name: "🚜 Pushback & taxi", d: "Leaving the gate and driving to the runway.", who: {
+    pilot: "Request pushback, start engines, and taxi along the route ground control gives.", cabin: "Safety demonstration, then secure the cabin.", ramp: "Push the aircraft back with the tug; the headset operator talks to the pilots.", ground: "Gives the taxi route to the runway and watches all moving traffic.", ops: "Keeps vehicles well clear of taxiing aircraft." } },
+  { id: "takeoff", name: "🛫 Takeoff", d: "Lining up, the takeoff roll, and the first climb.", who: {
+    pilot: "Line up when cleared, take off, and fly the departure route.", tower: "Clears the aircraft for takeoff once the runway is clear.", cabin: "Seated and strapped in, ready for an emergency.", radar: "Departure control takes over after takeoff and guides the climb." } },
+  { id: "cruise", name: "☁️ Cruise", d: "High above the weather, for most of the flight.", who: {
+    pilot: "Watch the systems, fuel, and weather; talk to each new control centre.", radar: "Area controllers keep cruising aircraft separated across the region.", dispatch: "Flight following: watches weather and delays and sends updates.", cabin: "Service, and keeping an eye on passengers." } },
+  { id: "landing", name: "🛬 Approach & landing", d: "Descending, lining up with the runway, and landing.", who: {
+    pilot: "Brief the approach, set flaps and gear, and land.", radar: "Approach control lines aircraft up in a sequence for the runway.", tower: "Clears the aircraft to land.", ops: "Runway checks and lighting between arrivals.", cabin: "Secure the cabin for landing." } },
+  { id: "arrive", name: "🏁 Arrival", d: "Off the runway and back to a gate, and the cycle starts again.", who: {
+    pilot: "Taxi to the gate, shut down, and note any defects in the tech log.", ground: "Guides the aircraft from the runway to its gate.", ramp: "Marshal the aircraft in, chocks and cones on, start unloading.", engineer: "Meets the aircraft and checks anything the pilots reported.", cabin: "Help passengers off and check the cabin.", dispatch: "Logs the arrival and plans the aircraft's next flight." } },
+];
+const RL = { phase: 0, sel: null, quiz: null };
+function rlRender() {
+  const ph = RL_PHASES[RL.phase];
+  $$("#rlPhases button").forEach((b, i) => b.classList.toggle("active", i === RL.phase));
+  $("#rlPhaseD").innerHTML = `<b>${ph.name.replace(/^\S+ /, "")}:</b> ${ph.d}`;
+  $("#rlGrid").innerHTML = Object.entries(RL_ROLES).map(([k, r]) => { const doing = ph.who[k];
+    return `<button type="button" class="rl-card${doing ? " on" : ""}${RL.sel === k ? " sel" : ""}" data-k="${k}"><span class="rl-ico">${r.icon}</span><b>${esc(r.name)}</b><small>${esc(r.sub)}</small><span class="rl-doing">${doing ? esc(doing) : "Not busy with this flight right now"}</span></button>`; }).join("");
+  const r = RL_ROLES[RL.sel];
+  $("#rlDetail").innerHTML = r ? `<div class="label">${r.icon} ${esc(r.name)}</div><p><b>${esc(r.short)}</b> ${esc(r.fact)}</p>
+    <div class="lab-facts rl-facts"><div><h5>Where they work</h5><p>${esc(r.where)}</p></div><div><h5>Tools</h5><p>${esc(r.tools)}</p></div><div><h5>Talks to</h5><p>${esc(r.talks)}</p></div><div><h5>How to become one</h5><p>${esc(r.become)}</p></div></div>
+    <h5 class="rl-h">Through the flight</h5><ul class="rl-timeline">${RL_PHASES.map((p) => `<li class="${p.who[RL.sel] ? "" : "idle"}"><b>${p.name}</b> ${p.who[RL.sel] ? esc(p.who[RL.sel]) : "–"}</li>`).join("")}</ul>` : `<p class="sub">👆 Click a role to see their whole job.</p>`;
+}
+function rlQuizNew() { RL.quiz = { qs: shuffle(Object.keys(RL_ROLES)).slice(0, 6), i: 0, score: 0, tried: false }; rlQuizRender(); }
+function rlQuizRender(feedback = "") {
+  const q = RL.quiz;
+  if (q.i >= q.qs.length) {
+    $("#rlQuiz").innerHTML = `<p class="tip">You scored <b>${q.score} / ${q.qs.length}</b>. ${q.score >= 5 ? "🎉 You know your airport!" : "Explore the role cards above and try again."}</p><button class="btn" type="button" id="rlAgain">Play again</button>`;
+    if (q.score >= 4) labAward("roles", "Airport roles quiz");
+    return;
+  }
+  const ans = q.qs[q.i], opts = shuffle([ans, ...shuffle(Object.keys(RL_ROLES).filter((k) => k !== ans)).slice(0, 3)]);
+  q.opts = q.opts && q.optsFor === q.i ? q.opts : opts; q.optsFor = q.i;
+  $("#rlQuiz").innerHTML = `<p class="rl-clue">“${esc(RL_ROLES[ans].clue)}”</p><div class="q-opts lab-opts">${q.opts.map((k) => `<button type="button" class="q-opt" data-k="${k}">${RL_ROLES[k].icon} ${esc(RL_ROLES[k].name)}</button>`).join("")}</div>
+    <div class="row"><span class="lab-score">Question ${q.i + 1} of ${q.qs.length} · Score ${q.score}</span>${feedback}</div>`;
+}
+function initRoles() {
+  $("#rlPhases").innerHTML = RL_PHASES.map((p, i) => `<button type="button" data-i="${i}">${p.name}</button>`).join("");
+  $("#rlPhases").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) { RL.phase = +b.dataset.i; rlRender(); } });
+  $("#rlGrid").addEventListener("click", (e) => { const b = e.target.closest(".rl-card"); if (b) { RL.sel = b.dataset.k; rlRender(); } });
+  $("#rlQuiz").addEventListener("click", (e) => {
+    if (e.target.id === "rlAgain") { rlQuizNew(); return; }
+    const b = e.target.closest(".q-opt"); const q = RL.quiz; if (!b || !q || b.disabled) return;
+    const ans = q.qs[q.i];
+    if (b.dataset.k === ans) {
+      if (!q.tried) q.score++;
+      b.classList.add("right"); $$("#rlQuiz .q-opt").forEach((x) => (x.disabled = true));
+      setTimeout(() => { q.i++; q.tried = false; rlQuizRender(); }, 900);
+    } else { q.tried = true; b.classList.add("wrong"); b.disabled = true; }
+  });
+  rlRender(); rlQuizNew();
+}
+
+initBuilder(); initRunway(); initPlanning(); initGround(); initRoles();

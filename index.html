@@ -20,6 +20,7 @@
     <a href="#dashboard" data-page="dashboard">Dashboard</a>
     <a href="#academy" data-page="academy">Academy</a>
     <a href="#lab" data-page="lab">Lab</a>
+    <a href="#ops" data-page="ops">Airport</a>
     <a href="#atc" data-page="atc">ATC &amp; Comms</a>
     <a href="#dictionary" data-page="dictionary">Dictionary</a>
     <a href="#aircraft" data-page="aircraft">Aircraft</a>
@@ -95,6 +96,7 @@
   <h2>Main features</h2>
   <div class="grid features">
     <a class="card link" href="#academy"><div class="card-ico">🎓</div><h3>Academy</h3><p>Learn about aircraft, aerodynamics, navigation, and aviation.</p><span class="go">Start learning →</span></a>
+    <a class="card link" href="#ops"><div class="card-ico">🛫</div><h3>Airport &amp; Flight Ops</h3><p>Build an airport, decode runways, plan a flight, and see how ground crews turn an aircraft around.</p><span class="go">Go behind the scenes →</span></a>
     <a class="card link" href="#lab"><div class="card-ico">🧪</div><h3>Aviation Lab</h3><p>Experiment with the four forces, airflow over a wing, aircraft engines, and cockpit instruments.</p><span class="go">Start experimenting →</span></a>
     <a class="card link" href="#atc"><div class="card-ico">🎧</div><h3>ATC &amp; Communications</h3><p>Understand pilots, control towers, VHF, and radio communication.</p><span class="go">Tune in →</span></a>
     <a class="card link" href="#dictionary"><div class="card-ico">📖</div><h3>Aviation Dictionary</h3><p>Search words like VHF, PMR, ILS, IFR, and transponder — <span id="termCount">140</span> terms.</p><span class="go">Look up a word →</span></a>
@@ -193,6 +195,20 @@
     <a class="card link" href="#lab/instruments"><div class="card-ico">🎛️</div><h3>Cockpit Instrument Lab</h3><p>Learn to read the altimeter, airspeed indicator, heading indicator, and artificial horizon.</p><span class="badge">Interactive</span></a>
   </div>
   <div class="tool-group" id="labGroup" data-tools="forces,aero,engines,instruments"></div>
+</section>
+
+<!-- ================= AIRPORT / FLIGHT OPS ================= -->
+<section id="page-ops" class="page">
+  <h2>Flight Operations &amp; Airport Management</h2>
+  <p class="sub">How do airports and airlines actually get a flight into the air? Build an airport, decode a runway, plan a route, turn an aircraft around at the gate, and meet the people who make it all happen.</p>
+  <div class="grid cards lab-cards ops-cards">
+    <a class="card link" href="#ops/builder"><div class="card-ico">🏗️</div><h3>Airport Builder</h3><p>Create a miniature airport with runways, taxiways, terminals, and hangars.</p><span class="badge">Interactive</span></a>
+    <a class="card link" href="#ops/runway"><div class="card-ico">🛬</div><h3>Runway Explorer</h3><p>Learn runway numbers, markings, lights, and designations.</p><span class="badge">Interactive</span></a>
+    <a class="card link" href="#ops/planning"><div class="card-ico">🗺️</div><h3>Flight Planning Room</h3><p>Learn about departure, destination, routes, waypoints, and alternate airports.</p><span class="badge">Interactive</span></a>
+    <a class="card link" href="#ops/ground"><div class="card-ico">🧳</div><h3>Ground Operations</h3><p>Discover how baggage, fuel, catering, maintenance, and ground crews support a flight.</p><span class="badge custom">Behind the scenes</span></a>
+    <a class="card link" href="#ops/roles"><div class="card-ico">👩‍✈️</div><h3>Airport Roles</h3><p>Explore what pilots, dispatchers, ground controllers, engineers, and air traffic controllers do.</p><span class="badge custom">Careers</span></a>
+  </div>
+  <div class="tool-group" id="opsGroup" data-tools="builder,runway,planning,ground,roles"></div>
 </section>
 
 <!-- ================= ATC & COMMS ================= -->
@@ -356,6 +372,110 @@
     <p class="sub">Logarithmic view of the radio spectrum from 100 kHz to 3 GHz. Hover or tap a band to learn more. Notice PMR446 sits far away from the aviation bands.</p>
     <div id="spectrum" class="spectrum"></div>
     <div id="specInfo" class="spec-info">Tap a coloured band.</div>
+  </div>
+
+  <!-- Airport Builder -->
+  <div class="tool card" id="tool-builder" data-label="🏗️ Airport Builder">
+    <h3>Airport Builder</h3>
+    <p class="sub">Design your own miniature airport. Pick a piece, then click or drag on the grid. Tick off the checklist, then test your airport with a real arrival.</p>
+    <div class="ab-wrap">
+      <div>
+        <div class="chips ab-palette" id="abPalette"></div>
+        <svg id="abGrid" class="ab-grid" viewBox="0 0 640 384" aria-label="Airport building grid"></svg>
+        <div class="row">
+          <button class="btn" type="button" id="abTest">▶ Test with a flight</button>
+          <button class="btn ghost" type="button" id="abExample">Load example</button>
+          <button class="btn ghost" type="button" id="abClear">Clear</button>
+          <span class="ab-hint" id="abHint"></span>
+        </div>
+      </div>
+      <div class="ab-side">
+        <div class="label">Checklist</div>
+        <ul class="ab-check" id="abCheck"></ul>
+        <div class="ab-info" id="abInfo"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Runway Explorer -->
+  <div class="tool card" id="tool-runway" data-label="🛬 Runway Explorer">
+    <h3>Runway Explorer</h3>
+    <p class="sub">Every paint mark and light on a runway has a job. Click anything on the runway to find out what it means, and switch to night to see the lights.</p>
+    <div class="row"><div class="seg" id="rwMode"><button type="button" data-m="day" class="active">☀ Day markings</button><button type="button" data-m="night">🌙 Night lights</button></div></div>
+    <svg id="rwSvg" class="rw-svg" viewBox="0 0 1000 300" aria-label="Runway seen from above"></svg>
+    <div class="rw-info" id="rwInfo"></div>
+    <div class="grid two rw-tools">
+      <div>
+        <h4>Runway number calculator</h4>
+        <label class="aero-ctl">Direction the runway points <span id="rwHdgV">274°</span><input type="range" id="rwHdg" min="1" max="360" value="274"></label>
+        <label class="aero-ctl">Side-by-side runways
+          <select id="rwPar"><option value="1">Just one</option><option value="2">Two (Left / Right)</option><option value="3">Three (Left / Centre / Right)</option></select></label>
+        <div class="rw-calc"><svg id="rwCompass" viewBox="-110 -110 220 220" aria-label="Runway on a compass"></svg><div id="rwCalcOut"></div></div>
+      </div>
+      <div>
+        <h4>PAPI lights: am I on the glide path?</h4>
+        <label class="aero-ctl">Approach angle <span id="rwPapiV">3.0°</span><input type="range" id="rwPapi" min="1.5" max="4.5" step="0.1" value="3"></label>
+        <svg id="rwPapiSvg" class="rw-papi" viewBox="0 0 320 150" aria-label="PAPI lights and approach path"></svg>
+        <p class="tip" id="rwPapiTip"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flight Planning Room -->
+  <div class="tool card" id="tool-planning" data-label="🗺️ Flight Planning">
+    <h3>Flight Planning Room</h3>
+    <p class="sub">Plan a flight across the (fictional) Aero Isles. Choose your aircraft, departure and destination, build a route through waypoints, and pick an alternate airport in case you can't land. Get every check green to have your plan approved.</p>
+    <div class="row">
+      <div class="seg" id="fpType"></div>
+      <button class="btn" type="button" id="fpMission">🎲 New mission</button>
+      <button class="btn ghost" type="button" id="fpReset">Clear plan</button>
+    </div>
+    <p class="fp-mission" id="fpMissionText"></p>
+    <div class="fp-wrap">
+      <div>
+        <div class="fp-steps" id="fpSteps"></div>
+        <svg id="fpMap" class="fp-map" viewBox="0 0 640 420" aria-label="Map of the Aero Isles"></svg>
+        <div class="row"><button class="btn ghost" type="button" id="fpUndo">↶ Remove last waypoint</button><span class="ab-hint" id="fpHint"></span></div>
+      </div>
+      <div class="fp-side">
+        <div class="label">Checks</div>
+        <ul class="ab-check" id="fpChecks"></ul>
+        <div class="label">Flight plan</div>
+        <div class="fp-strip" id="fpStrip"></div>
+      </div>
+    </div>
+    <h4>Flight planning words</h4>
+    <div class="grid three lab-facts" id="fpTerms"></div>
+  </div>
+
+  <!-- Ground Operations -->
+  <div class="tool card" id="tool-ground" data-label="🧳 Ground Ops">
+    <h3>Ground Operations: the turnaround</h3>
+    <p class="sub">An airliner can land, unload, refuel, get cleaned and restocked, reload, and leave again in about 45 minutes. Press play to watch the ground crews work, and click any vehicle or task to see what it does.</p>
+    <div class="row">
+      <button class="btn" type="button" id="goPlay">▶ Play</button>
+      <div class="seg" id="goSpeed"><button type="button" data-s="1" class="active">1×</button><button type="button" data-s="2">2×</button><button type="button" data-s="4">4×</button></div>
+      <label class="aero-ctl go-scrub">Turnaround clock <span id="goClock">00:00</span><input type="range" id="goTime" min="0" max="45" step="0.1" value="0"></label>
+    </div>
+    <div class="go-wrap">
+      <svg id="goApron" class="go-apron" viewBox="0 0 640 420" aria-label="Aircraft at the gate with ground vehicles"></svg>
+      <div class="go-side"><div id="goInfo" class="go-info"></div></div>
+    </div>
+    <div class="go-gantt" id="goGantt"></div>
+    <h4>Challenge: put the turnaround in order</h4>
+    <div id="goOrder"></div>
+  </div>
+
+  <!-- Airport Roles -->
+  <div class="tool card" id="tool-roles" data-label="👩‍✈️ Airport Roles">
+    <h3>Airport Roles</h3>
+    <p class="sub">A single flight needs dozens of people. Step through a flight from planning to arrival and see who's working at each moment. Click anyone to learn about their job.</p>
+    <div class="seg rl-phases" id="rlPhases"></div>
+    <p class="rl-phase-d" id="rlPhaseD"></p>
+    <div class="rl-grid" id="rlGrid"></div>
+    <div class="rl-detail" id="rlDetail"></div>
+    <h4>Quiz: who am I?</h4>
+    <div id="rlQuiz"></div>
   </div>
 
   <!-- Four Forces Simulator -->
