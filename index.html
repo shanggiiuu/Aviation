@@ -274,6 +274,11 @@
 
   <h2 class="mt">Comms tools</h2>
   <div class="tool-group" data-tools="phonetic,spectrum,squawk"></div>
+
+  <h2 class="mt">Communication explorer</h2>
+  <p class="sub">Go deeper into how aircraft and control facilities talk: the words they use, how they're identified, what goes wrong, which frequencies carry it, and a whole flight from start to finish.</p>
+  <div class="edu-note">🎓 <b>Educational simulation.</b> Every callsign, airline, airport, waypoint and frequency in this section is a fictional, clearly labelled example. Nothing here transmits on any radio, and it is not a substitute for official training material.</div>
+  <div class="tool-group" id="commsGroup" data-tools="phraseology,callsign,breakdown,freqx,timeline"></div>
 </section>
 
 <!-- ================= AIRCRAFT LIBRARY ================= -->
@@ -613,6 +618,104 @@
       <div id="sqOut" class="sq-out"></div>
     </div>
     <div class="grid three" id="sqCards"></div>
+  </div>
+
+  <!-- Radio phraseology library -->
+  <div class="tool card" id="tool-phraseology" data-label="🗣 Phraseology Library">
+    <h3>Radio phraseology library</h3>
+    <p class="sub">Standard words keep radio calls short and impossible to misunderstand. Search or filter, then tap 🔊 on a card to hear its example. Examples use fictional callsigns; exact phraseology varies by country.</p>
+    <input id="phrSearch" type="search" placeholder="Search — e.g. roger, wilco, say again, squawk" aria-label="Search phraseology">
+    <div class="chips" id="phrFilters"></div>
+    <div class="phr-grid" id="phrGrid"></div>
+    <h4>Quick check — which word fits?</h4>
+    <div id="phrQuiz" class="phr-quiz"></div>
+  </div>
+
+  <!-- Call sign explorer -->
+  <div class="tool card" id="tool-callsign" data-label="🏷 Call Signs">
+    <h3>Call sign explorer</h3>
+    <p class="sub">Every radio call starts with who you're calling and who you are. Build an aircraft call sign or a control facility call sign and see how it's spoken. All airlines and airports here are fictional.</p>
+    <div class="grid two">
+      <div class="cs-box">
+        <div class="label">Aircraft call sign</div>
+        <div class="seg" id="csMode"><button data-mode="reg" class="active">Registration</button><button data-mode="airline">Airline flight</button></div>
+        <div id="csRegFields" class="cs-fields">
+          <label>Registration <input id="csReg" value="G-ZZXY" maxlength="8" spellcheck="false" autocomplete="off"></label>
+        </div>
+        <div id="csAirFields" class="cs-fields hidden">
+          <label>Fictional airline <select id="csAirline"></select></label>
+          <label>Flight number <input id="csFlight" value="451" maxlength="4" inputmode="numeric" autocomplete="off"></label>
+          <label>Wake suffix <select id="csSuffix"><option value="">None (light / medium)</option><option value="HEAVY">Heavy</option><option value="SUPER">Super</option></select></label>
+        </div>
+        <div class="cs-out" id="csOut"></div>
+      </div>
+      <div class="cs-box">
+        <div class="label">Control facility call sign</div>
+        <label>Fictional airport <select id="csAirport"></select></label>
+        <div class="chips" id="csUnits"></div>
+        <div class="cs-out" id="csFacOut"></div>
+      </div>
+    </div>
+    <h4>Registration prefixes — the aircraft's "country code"</h4>
+    <div class="chips" id="csPrefixes"></div>
+    <h4>Rules of thumb</h4>
+    <ul class="small cs-rules">
+      <li>A first call is <b>"[station you're calling], [your call sign]"</b> — e.g. "Westbrook Tower, G-ZZXY".</li>
+      <li>Light aircraft use their <b>registration</b>, spelled out phonetically. After ATC shortens it first, the pilot may too (G-ZZXY → "Golf X-ray Yankee").</li>
+      <li>Airliners use a <b>telephony designator</b> plus flight number ("AEROLEARN four five one"). The ICAO code (ALW451) is what appears on the radar label.</li>
+      <li><b>HEAVY</b> or <b>SUPER</b> warns others about strong wake turbulence behind big aircraft.</li>
+      <li>The call sign goes at the <b>end</b> of every readback.</li>
+    </ul>
+  </div>
+
+  <!-- Communication breakdown -->
+  <div class="tool card" id="tool-breakdown" data-label="📵 Comms Breakdown">
+    <h3>Communication breakdown</h3>
+    <p class="sub">Radio doesn't always work perfectly. Pick a problem to see what it sounds like and what pilots and controllers do about it, then answer the check.</p>
+    <div class="chips" id="brkChips"></div>
+    <div id="brkDetail" class="brk-detail"></div>
+    <h4>Demo — what a blocked transmission sounds like</h4>
+    <p class="sub small">Two fictional aircraft press transmit at the same moment. Hear and see why neither message gets through.</p>
+    <button class="btn small" id="brkDemoBtn">▶ Play the blocked call</button>
+    <div id="brkDemo" class="brk-demo"></div>
+    <h4>No radio? Light signals from the tower</h4>
+    <p class="sub small">If a radio fails, the tower can aim a signal lamp at the aircraft. Choose where the aircraft is, then a signal.</p>
+    <div class="seg" id="lightWhere"><button data-w="air" class="active">✈ In the air</button><button data-w="ground">🚖 On the ground</button></div>
+    <div class="light-row" id="lightBtns"></div>
+    <div id="lightOut" class="spec-info"></div>
+  </div>
+
+  <!-- Frequency explorer -->
+  <div class="tool card" id="tool-freqx" data-label="📶 Frequency Explorer">
+    <h3>Frequency explorer</h3>
+    <p class="sub">Aviation shares the radio spectrum with ships, broadcasters and walkie-talkies. Type any frequency to see which band and service it falls in, or tap a service to compare. <a href="#atc" data-open-tool="spectrum">See the bands on the spectrum chart →</a></p>
+    <div class="row"><input id="fxIn" value="121.5" inputmode="decimal" placeholder="Frequency in MHz, e.g. 118.7" aria-label="Frequency in MHz" autocomplete="off"><span class="sub">MHz</span></div>
+    <div id="fxOut" class="fx-out"></div>
+    <h4>Services side by side</h4>
+    <div class="fx-list" id="fxList"></div>
+    <div id="fxDetail" class="spec-info"></div>
+    <h4>How far does VHF reach?</h4>
+    <p class="sub small">VHF and UHF travel in straight lines, so range depends on the height of both antennas (the radio horizon). Approximate formula: range (NM) ≈ 1.23 × (√aircraft height ft + √ground antenna height ft). Terrain and transmitter power can reduce it.</p>
+    <div class="fx-range">
+      <label>Aircraft altitude <b id="fxAltV"></b><input type="range" id="fxAlt" min="0" max="40000" step="500" value="3000"></label>
+      <label>Ground antenna height <b id="fxAntV"></b><input type="range" id="fxAnt" min="0" max="500" step="10" value="50"></label>
+    </div>
+    <div id="fxRangeOut" class="fx-range-out"></div>
+  </div>
+
+  <!-- Communication timeline -->
+  <div class="tool card" id="tool-timeline" data-label="🕒 Comms Timeline">
+    <h3>Communication timeline</h3>
+    <p class="sub">Follow the fictional flight <b>AeroLearn 451</b> from <b>Westbrook International</b> to <b>Harbourton Regional</b> (both fictional) and hear every radio exchange, from the first weather broadcast to parking at the gate.</p>
+    <svg class="tl-profile" id="tlProfile" viewBox="0 0 640 140" aria-label="Flight profile"></svg>
+    <div class="tl-steps" id="tlSteps"></div>
+    <div class="row tl-controls">
+      <button class="btn ghost small" id="tlPrev">← Previous</button>
+      <button class="btn small" id="tlNext">Next →</button>
+      <button class="btn ghost small" id="tlPlay">🔊 Play this stage</button>
+      <label class="toggle"><input type="checkbox" id="tlPractice"> Practice: hide pilot readbacks</label>
+    </div>
+    <div id="tlDetail" class="tl-detail"></div>
   </div>
 </div>
 
