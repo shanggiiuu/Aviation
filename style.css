@@ -606,3 +606,94 @@ a.btn { text-decoration: none; display: inline-block; }
   .gloss-controls select { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---- Theme toggle button ---- */
+.theme-toggle {
+  width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 1.1rem; cursor: pointer;
+  background: rgba(255,255,255,.65); border: 1px solid var(--line); transition: transform .2s, box-shadow .2s;
+}
+.theme-toggle:hover { transform: rotate(-15deg); box-shadow: 0 0 0 3px rgba(236,72,153,.2); }
+@media (max-width: 760px) { .theme-toggle { margin-left: auto; } .theme-toggle + .account-chip { margin-left: 0; } }
+
+/* ===== Night mode — cockpit at night (deep navy · glowing blue · pink) ===== */
+[data-theme="night"] {
+  color-scheme: dark;
+  --bg: #070d1f;
+  --bg2: rgba(17, 27, 56, .6);
+  --card: rgba(18, 30, 62, .68);
+  --line: rgba(120, 160, 255, .2);
+  --text: #e3ebff;
+  --muted: #94a3c8;
+  --accent: #60a5fa;
+  --accent2: #f472b6;
+  --amber: #f9a8d4;
+  --red: #fb7185;
+  --navy: #050b1c;
+}
+[data-theme="night"] body {
+  background:
+    radial-gradient(1.5px 1.5px at 12% 18%, rgba(255,255,255,.7), transparent 60%),
+    radial-gradient(1px 1px at 32% 8%, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1.5px 1.5px at 58% 22%, rgba(255,255,255,.55), transparent 60%),
+    radial-gradient(1px 1px at 76% 12%, rgba(255,255,255,.65), transparent 60%),
+    radial-gradient(1.5px 1.5px at 90% 30%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1px 1px at 22% 40%, rgba(255,255,255,.45), transparent 60%),
+    radial-gradient(1px 1px at 66% 45%, rgba(255,255,255,.4), transparent 60%),
+    linear-gradient(rgba(96, 165, 250, .04) 1px, transparent 1px) 0 0 / 44px 44px,
+    linear-gradient(90deg, rgba(96, 165, 250, .04) 1px, transparent 1px) 0 0 / 44px 44px,
+    radial-gradient(900px 500px at 85% 105%, rgba(244, 114, 182, .18), transparent 60%),
+    linear-gradient(180deg, #040814 0%, #0a1430 45%, #141a3d 80%, #2a1638 100%);
+  background-attachment: fixed;
+}
+/* glass surfaces */
+[data-theme="night"] .topbar { background: rgba(8, 14, 34, .72); border-bottom-color: rgba(120,160,255,.15); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+[data-theme="night"] footer { background: rgba(8, 14, 34, .6); border-top-color: rgba(120,160,255,.15); }
+[data-theme="night"] .card { border-color: rgba(120,160,255,.14); box-shadow: 0 0 0 1px var(--line), 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); }
+[data-theme="night"] .card.link:hover { box-shadow: 0 0 0 1px var(--accent), 0 14px 34px rgba(96,165,250,.25); }
+[data-theme="night"] .instrument { background: rgba(18,30,62,.6); border-color: rgba(120,160,255,.2); box-shadow: 0 0 0 1px var(--line), 0 18px 40px rgba(0,0,0,.45); }
+[data-theme="night"] .modal { background: rgba(0, 0, 0, .55); }
+[data-theme="night"] .modal-box { background: rgba(14, 24, 52, .94); border-color: rgba(120,160,255,.2); box-shadow: 0 0 0 1px var(--line), 0 30px 60px rgba(0,0,0,.6); }
+[data-theme="night"] .fc-front, [data-theme="night"] .fc-back { border-color: rgba(120,160,255,.2); box-shadow: 0 0 0 1px var(--line), 0 16px 36px rgba(0,0,0,.45); }
+[data-theme="night"] .fc-front { background: linear-gradient(135deg, rgba(30,58,138,.85), rgba(112,26,117,.75)); color: #bfdbfe; }
+[data-theme="night"] .fc-back { background: rgba(14,24,52,.95); }
+
+/* light-tinted controls → dark glass */
+[data-theme="night"] #nav a:hover,
+[data-theme="night"] .btn.ghost,
+[data-theme="night"] input, [data-theme="night"] select, [data-theme="night"] textarea,
+[data-theme="night"] .chip, [data-theme="night"] .progress, [data-theme="night"] .lesson-body table,
+[data-theme="night"] .check-q, [data-theme="night"] .tool-tabs button, [data-theme="night"] .ph-tile,
+[data-theme="night"] .mrow, [data-theme="night"] .spectrum, [data-theme="night"] .spec-info,
+[data-theme="night"] .conv-group, [data-theme="night"] .q-opt, [data-theme="night"] .atc-step,
+[data-theme="night"] .vote, [data-theme="night"] .account-chip, [data-theme="night"] .seg,
+[data-theme="night"] .sim-log, [data-theme="night"] .avatar-pick span, [data-theme="night"] .theme-toggle {
+  background-color: rgba(10, 18, 42, .7);
+}
+[data-theme="night"] .chip.active, [data-theme="night"] .vote.on { background-color: var(--accent2); }
+[data-theme="night"] .tool-tabs button.active, [data-theme="night"] .atc-step.active, [data-theme="night"] .seg button.active { background-color: var(--navy); }
+[data-theme="night"] #metarIn, [data-theme="night"] #sqIn { background-color: var(--navy); }
+[data-theme="night"] .check-q { border-color: rgba(96,165,250,.35); }
+[data-theme="night"] ::placeholder { color: #6b7aa3; }
+
+/* dark "navy" surfaces get a faint outline so they stand out from dark cards */
+[data-theme="night"] .readout, [data-theme="night"] .xp, [data-theme="night"] .ph-word,
+[data-theme="night"] .freq, [data-theme="night"] .metar-raw, [data-theme="night"] .quiz-hist div,
+[data-theme="night"] .ap-codes span, [data-theme="night"] .toast { box-shadow: 0 0 0 1px rgba(120,160,255,.22); }
+[data-theme="night"] .clock { color: #bfdbfe; text-shadow: 0 0 14px rgba(96,165,250,.55); }
+[data-theme="night"] .hdg-tape { background: rgba(3, 7, 18, .9); border-color: rgba(120,160,255,.25); }
+
+/* illustrations & diagrams */
+[data-theme="night"] .axis-view { background: linear-gradient(#0b1838, #15224a 55%, #3b1d46 55.1%, #4a1f4f); }
+[data-theme="night"] .axis-view:nth-child(3) { background: linear-gradient(#0f1d44, #2a1a44); }
+[data-theme="night"] .map-bg { fill: #10241c; }
+[data-theme="night"] .apron { fill: #26324a; }
+[data-theme="night"] .ex-bg { fill: rgba(10, 18, 42, .6); }
+[data-theme="night"] .part { fill: #1e3a8a; stroke: #93c5fd; }
+[data-theme="night"] .part[data-part="fuselage"] { fill: #1a2c5c; }
+[data-theme="night"] .part.ctl { fill: #5b1f45; stroke: #fbbf24; }
+[data-theme="night"] .part.shake { fill: #7f1d1d; }
+[data-theme="night"] .ok-bg { fill: #0f1d44; }
+[data-theme="night"] .kneeboard { background: #2b2410; border-color: #6b5a1e; color: #e9dca8; }
+[data-theme="night"] .ctl-tag { background: #2b1d08; color: #fcd34d; }
+[data-theme="night"] .big-avatar, [data-theme="night"] .pf-avatar { background: linear-gradient(135deg, #1e3a8a, #6b2157); }
+[data-theme="night"] .avatar-pick input:checked + span { background-color: #4a1d3d; }

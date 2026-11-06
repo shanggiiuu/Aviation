@@ -1703,4 +1703,22 @@ renderSquawk();
 startQuiz();
 renderFlashFilters();
 buildDeck();
+initTheme();
 route();
+
+// ---- Day / night theme (choice stored in localStorage as "sky_theme") ----
+function initTheme() {
+  const btn = document.getElementById("themeToggle");
+  const sync = () => {
+    const night = document.documentElement.dataset.theme === "night";
+    btn.textContent = night ? "☀️" : "🌙";
+    btn.title = btn.ariaLabel = night ? "Switch to day mode" : "Switch to night mode";
+  };
+  btn.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "night" ? "day" : "night";
+    document.documentElement.dataset.theme = next;
+    rawSet("sky_theme", next);
+    sync();
+  });
+  sync();
+}

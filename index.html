@@ -7,6 +7,10 @@
 <meta name="description" content="A beginner-friendly aviation learning platform with an interactive glossary, lessons, quizzes, and community discussions.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>">
 <link rel="stylesheet" href="style.css">
+<script>/* apply saved/system theme before first paint to avoid a flash */
+(function () { var t; try { t = JSON.parse(localStorage.getItem("sky_theme")); } catch (e) {}
+  if (t !== "night" && t !== "day") t = matchMedia("(prefers-color-scheme: dark)").matches ? "night" : "day";
+  document.documentElement.dataset.theme = t; })();</script>
 </head>
 <body>
 <header class="topbar">
@@ -22,6 +26,7 @@
     <a href="#community" data-page="community">Community</a>
   </nav>
   <div class="hdg-tape" aria-hidden="true"><div class="hdg-track" id="hdgTrack"></div><div class="hdg-mark"></div><div class="hdg-read" id="hdgRead">000</div></div>
+  <button class="theme-toggle" id="themeToggle" type="button" title="Switch to night mode" aria-label="Switch to night mode">🌙</button>
   <a class="account-chip" href="#profile" title="Your profile"><span id="acctAvatar">👤</span><span id="acctName">Guest</span><span class="xp">⭐ <span id="xp">0</span> XP</span></a>
 </header>
 
@@ -172,7 +177,7 @@
   <div class="progress-wrap"><span class="pw-label">Academy progress</span><div class="progress"><div class="bar" id="academyBar"></div></div><span id="academyPct">0%</span></div>
   <div id="academyLessons"></div>
   <h2 class="mt">Academy tools</h2>
-  <div class="tool-group" data-tools="metar,axes,convert"></div>
+  <div class="tool-group" data-tools="instruments,metar,axes,convert"></div>
 </section>
 
 <!-- ================= ATC & COMMS ================= -->
@@ -336,6 +341,40 @@
     <p class="sub">Logarithmic view of the radio spectrum from 100 kHz to 3 GHz. Hover or tap a band to learn more. Notice PMR446 sits far away from the aviation bands.</p>
     <div id="spectrum" class="spectrum"></div>
     <div id="specInfo" class="spec-info">Tap a coloured band.</div>
+  </div>
+
+  <!-- Cockpit Instrument Lab -->
+  <div class="tool card" id="tool-instruments" data-label="🎛 Instrument Lab">
+    <h3>Cockpit Instrument Lab</h3>
+    <p class="sub">Learn what an altimeter, airspeed indicator, heading indicator, and artificial horizon show. Move the controls, press <b>Fly</b> to see them work together, and click any instrument to learn how to read it.</p>
+    <div class="lab">
+      <div class="lab-panel" id="labPanel" role="group" aria-label="Instrument panel"></div>
+      <div class="lab-side">
+        <div class="lab-controls">
+          <div class="label">Controls</div>
+          <label>Pitch <span id="labPitchV">0°</span><input type="range" id="labPitch" min="-15" max="20" value="0"></label>
+          <label>Bank <span id="labBankV">0°</span><input type="range" id="labBank" min="-45" max="45" value="0"></label>
+          <label>Airspeed <span id="labSpdV">110 kt</span><input type="range" id="labSpd" min="0" max="180" value="110"></label>
+          <label>Altitude <span id="labAltV">3,000 ft</span><input type="range" id="labAlt" min="0" max="12000" step="10" value="3000"></label>
+          <label>Heading <span id="labHdgV">360°</span><input type="range" id="labHdg" min="0" max="359" value="0"></label>
+          <div class="row">
+            <button class="btn" id="labFly" type="button">▶ Fly</button>
+            <select id="labPreset" aria-label="Scenario">
+              <option value="">Scenarios…</option>
+              <option value="cruise">Straight &amp; level cruise</option>
+              <option value="climb">Climb</option>
+              <option value="descent">Descent</option>
+              <option value="left">Left turn</option>
+              <option value="right">Right turn</option>
+              <option value="slow">Slow flight (near stall)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="lab-info" id="labInfo"></div>
+    <h4>Read the instruments</h4>
+    <div class="lab-quiz" id="labQuiz"></div>
   </div>
 
   <!-- Axes -->
