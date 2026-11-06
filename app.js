@@ -1722,3 +1722,245 @@ function initTheme() {
   });
   sync();
 }
+
+// ================= Cockpit Instrument Lab =================
+// Four of the "six pack" instruments drawn as SVG. Controls set the aircraft state directly;
+// "Fly" links them: bank turns the aircraft (standard rate-of-turn formula) and pitch climbs/descends.
+const LAB_INFO = {
+  asi: {
+    name: "Airspeed indicator", term: "ASI",
+    shows: "How fast the aircraft is moving through the air, in knots (indicated airspeed).",
+    works: "Compares ram-air pressure from the {{Pitot tube|pitot tube}} with still air pressure from the {{Static port|static ports}}. The faster you fly, the bigger the difference.",
+    read: "Read the number the needle points at. The coloured arcs matter more than the exact number: <b>white</b> = flaps may be used, <b>green</b> = normal operating range, <b>yellow</b> = caution (smooth air only), <b>red line</b> = never exceed.",
+    watch: "If the pitot tube ices up, the airspeed can freeze or behave like an altimeter. That's why it's heated.",
+  },
+  ai: {
+    name: "Attitude indicator", term: "Attitude indicator", aka: "Artificial horizon",
+    shows: "The aircraft's pitch (nose up or down) and bank (wings tilted left or right) compared with the real horizon.",
+    works: "A spinning gyroscope (or electronic sensors in modern aircraft) keeps the horizon card level while the aircraft moves around it.",
+    read: "The small aircraft symbol is <b>you</b> and it never moves. Blue is sky, the other colour is ground. If the symbol is above the horizon line, the nose is up. The pointer at the top shows bank against marks at 10°, 20°, 30°, 45° and 60°.",
+    watch: "It's the most important instrument in cloud. Pilots scan it constantly and cross-check everything else against it.",
+  },
+  alt: {
+    name: "Altimeter", term: "Altimeter",
+    shows: "Height above sea level in feet, as long as the correct pressure (QNH) is set in the little window.",
+    works: "It's a barometer. Air pressure drops as you climb, and the altimeter turns that pressure into feet using the {{Static port|static ports}}.",
+    read: "Like a clock: the <b>long thin hand</b> counts hundreds of feet (one lap = 1,000 ft), the <b>short wide hand</b> counts thousands, and the small triangle at the rim counts ten-thousands. Read the short hand first, then the long hand.",
+    watch: "Mixing up the hands means a 1,000 ft mistake, one of the classic reading errors. Always check the pressure setting too.",
+  },
+  hdg: {
+    name: "Heading indicator", term: "Heading indicator", aka: "Directional gyro",
+    shows: "Which way the nose is pointing, in degrees (000–359). 090 is east, 180 south, 270 west, 360 north.",
+    works: "A gyroscope keeps the compass card steady, so unlike the magnetic compass it doesn't swing during turns or speed changes.",
+    read: "Read the number under the line at the top. Numbers are shown in tens without the last zero: <b>3</b> means 030°, <b>24</b> means 240°.",
+    watch: "Gyros slowly drift, so pilots line it up with the magnetic compass every 15 minutes or so in steady flight.",
+  },
+};
+const lab = { pitch: 0, bank: 0, spd: 110, alt: 3000, hdg: 0, flying: false, last: 0, sel: "ai", q: null, score: 0, asked: 0 };
+const labPolar = (r, a) => [+(r * Math.sin(a * Math.PI / 180)).toFixed(2), +(-r * Math.cos(a * Math.PI / 180)).toFixed(2)];
+const labArc = (r, a1, a2) => { const [x1, y1] = labPolar(r, a1), [x2, y2] = labPolar(r, a2); return `M${x1} ${y1} A${r} ${r} 0 ${a2 - a1 > 180 ? 1 : 0} 1 ${x2} ${y2}`; };
+const labLine = (r1, r2, a, cls) => { const [x1, y1] = labPolar(r1, a), [x2, y2] = labPolar(r2, a); return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="${cls}"/>`; };
+const labTicks = (n, step, r1, r2Fn, cls) => Array.from({ length: n }, (_, i) => labLine(r1, r2Fn(i), i * step, cls)).join("");
+const asiAngle = (v) => Math.max(0, Math.min(v, 200)) * 1.6;
+const labVS = () => Math.round(lab.spd * 101.27 * Math.sin(lab.pitch * Math.PI / 180) * 0.5);
+const labTurn = () => lab.spd < 20 ? 0 : 1091 * Math.tan(lab.bank * Math.PI / 180) / Math.max(lab.spd, 40);
+const fmtHdg = (h) => String(Math.round(h) % 360 || 360).padStart(3, "0");
+
+function buildLabPanel() {
+  const bezel = `<circle r="97" class="li-bezel"/><circle r="86" class="li-face"/>`;
+  // Airspeed indicator (0–200 kt over 320°)
+  const asiNums = Array.from({ length: 10 }, (_, i) => { const v = i * 20, [x, y] = labPolar(60, asiAngle(v)); return v ? `<text x="${x}" y="${y}" class="li-num">${v}</text>` : ""; }).join("");
+  const asi = `<svg viewBox="-100 -100 200 200">${bezel}
+    <path d="${labArc(74, asiAngle(40), asiAngle(85))}" class="li-arc white"/>
+    <path d="${labArc(80, asiAngle(50), asiAngle(129))}" class="li-arc green"/>
+    <path d="${labArc(80, asiAngle(129), asiAngle(163))}" class="li-arc yellow"/>
+    ${labLine(70, 86, asiAngle(163), "li-redline")}
+    ${labTicks(21, 16, 86, (i) => (i % 2 ? 79 : 74), "li-tick")}${asiNums}
+    <text y="-30" class="li-cap">AIRSPEED</text><text y="-19" class="li-cap">KNOTS</text>
+    <g id="labAsiNeedle"><path d="M-3 12 L0 -78 L3 12 Z" class="li-needle"/></g><circle r="6" class="li-hub"/></svg>`;
+  // Attitude indicator (2.6 px per degree of pitch)
+  const k = 2.6, ladder = [5, 10, 15, 20].flatMap((d) => [d, -d]).map((d) => {
+    const w = d % 10 ? 12 : 24, y = -d * k;
+    return `<line x1="${-w}" y1="${y}" x2="${w}" y2="${y}"/>${d % 10 ? "" : `<text x="${w + 9}" y="${y + 3}">${Math.abs(d)}</text><text x="${-w - 9}" y="${y + 3}">${Math.abs(d)}</text>`}`; }).join("");
+  const bankMarks = [-60, -45, -30, -20, -10, 10, 20, 30, 45, 60].map((a) => labLine(78, a % 30 ? 84 : 88, a, "li-tick")).join("");
+  const ai = `<svg viewBox="-100 -100 200 200">${bezel}
+    <defs><clipPath id="labAiClip"><circle r="86"/></clipPath></defs>
+    <g clip-path="url(#labAiClip)"><g id="labAiRoll"><g id="labAiPitch">
+      <rect x="-250" y="-400" width="500" height="400" class="li-sky"/><rect x="-250" y="0" width="500" height="400" class="li-ground"/>
+      <line x1="-250" y1="0" x2="250" y2="0" class="li-horizon"/><g class="li-ladder">${ladder}</g></g>
+      <path d="M0 -76 L-6 -66 L6 -66 Z" class="li-bankptr"/></g></g>
+    ${bankMarks}<path d="M0 -78 L-6 -90 L6 -90 Z" class="li-index"/>
+    <path d="M-52 0 H-18 L-9 9 M52 0 H18 L9 9" class="li-plane"/><circle r="3.5" class="li-plane-dot"/></svg>`;
+  // Altimeter
+  const altNums = Array.from({ length: 10 }, (_, i) => { const [x, y] = labPolar(62, i * 36); return `<text x="${x}" y="${y}" class="li-num big">${i}</text>`; }).join("");
+  const alt = `<svg viewBox="-100 -100 200 200">${bezel}
+    ${labTicks(50, 7.2, 86, (i) => (i % 5 ? 80 : 74), "li-tick")}${altNums}
+    <text y="-26" class="li-cap">ALT</text><text y="-15" class="li-cap">100 FEET</text>
+    <rect x="22" y="-8" width="40" height="16" rx="2" class="li-window"/><text x="42" y="0" class="li-wintext">1013</text><text x="42" y="18" class="li-cap small">hPa</text>
+    <g id="labAlt10k"><path d="M0 -86 L-5 -74 L5 -74 Z" class="li-needle"/></g>
+    <g id="labAlt1k"><path d="M-6 6 L-5 -38 L0 -48 L5 -38 L6 6 Z" class="li-needle wide"/></g>
+    <g id="labAlt100"><path d="M-2.5 14 L0 -80 L2.5 14 Z" class="li-needle"/></g><circle r="6" class="li-hub"/></svg>`;
+  // Heading indicator (rotating card)
+  const card = labTicks(72, 5, 86, (i) => (i % 2 ? 80 : 74), "li-tick") + "N 3 6 E 12 15 S 21 24 W 30 33".split(" ").map((t, i) =>
+    `<text transform="rotate(${i * 30}) translate(0 -60)" class="li-num${i % 3 ? "" : " big cardinal"}">${t}</text>`).join("");
+  const hdg = `<svg viewBox="-100 -100 200 200">${bezel}
+    <g id="labHdgCard">${card}</g>
+    ${[45, 135, 225, 315].map((a) => `<path transform="rotate(${a})" d="M0 -87 L-4 -94 L4 -94 Z" class="li-index soft"/>`).join("")}
+    <path d="M0 -84 L-6 -95 L6 -95 Z" class="li-index"/><line x1="0" y1="-86" x2="0" y2="-70" class="li-lubber"/>
+    <path d="M0 -26 C3 -26 3 -20 3 -14 L3 -6 L28 4 L28 9 L3 4 L3 18 L11 24 L11 28 L0 25 L-11 28 L-11 24 L-3 18 L-3 4 L-28 9 L-28 4 L-3 -6 L-3 -14 C-3 -20 -3 -26 0 -26 Z" class="li-planeicon"/></svg>`;
+  const insts = { asi, ai, alt, hdg };
+  $("#labPanel").innerHTML = ["asi", "ai", "alt", "hdg"].map((key) =>
+    `<button type="button" class="lab-inst" data-inst="${key}" aria-label="${LAB_INFO[key].name}">${insts[key]}<span>${LAB_INFO[key].name}</span></button>`).join("") +
+    `<div class="readouts lab-readouts"><div class="readout"><small>V/S FPM</small><b id="labVS">0</b></div><div class="readout"><small>TURN °/S</small><b id="labTR">0.0</b></div><div class="readout"><small>STATUS</small><b id="labStat" class="pink">OK</b></div></div>`;
+}
+
+function renderLab() {
+  const s = lab;
+  $("#labAsiNeedle").setAttribute("transform", `rotate(${asiAngle(s.spd)})`);
+  $("#labAiRoll").setAttribute("transform", `rotate(${-s.bank})`);
+  $("#labAiPitch").setAttribute("transform", `translate(0 ${s.pitch * 2.6})`);
+  $("#labAlt100").setAttribute("transform", `rotate(${(s.alt % 1000) * 0.36})`);
+  $("#labAlt1k").setAttribute("transform", `rotate(${(s.alt % 10000) * 0.036})`);
+  $("#labAlt10k").setAttribute("transform", `rotate(${s.alt * 0.0036})`);
+  $("#labHdgCard").setAttribute("transform", `rotate(${-s.hdg})`);
+  const vs = labVS(), tr = labTurn();
+  $("#labVS").textContent = (vs > 0 ? "+" : "") + (Math.round(vs / 10) * 10);
+  $("#labTR").textContent = Math.abs(tr).toFixed(1) + (tr > 0.05 ? " R" : tr < -0.05 ? " L" : "");
+  const stall = s.spd < 52 && s.alt > 0, fast = s.spd > 163;
+  $("#labStat").textContent = stall ? "STALL" : fast ? "VNE!" : s.alt <= 0 ? "GROUND" : "OK";
+  $("#labStat").parentElement.classList.toggle("warn", stall || fast);
+  // Keep the sliders in step with the state (they move by themselves while flying)
+  const set = (id, v, txt) => { $("#" + id).value = v; $("#" + id + "V").textContent = txt; };
+  set("labPitch", s.pitch, (s.pitch > 0 ? "+" : "") + s.pitch + "°");
+  set("labBank", s.bank, s.bank ? `${Math.abs(s.bank)}° ${s.bank < 0 ? "L" : "R"}` : "0°");
+  set("labSpd", Math.round(s.spd), Math.round(s.spd) + " kt");
+  set("labAlt", Math.round(s.alt), Math.round(s.alt).toLocaleString("en-US") + " ft");
+  set("labHdg", Math.round(s.hdg) % 360, fmtHdg(s.hdg) + "°");
+  if (!s.q) renderLabInfo(); // don't give away quiz answers
+}
+
+function labNow(key) {
+  const s = lab, a = Math.round(s.alt);
+  if (key === "asi") {
+    const v = Math.round(s.spd), band = v >= 163 ? "past the red line, faster than the aircraft is ever allowed to fly" : v >= 129 ? "in the yellow arc: caution, smooth air only" : v >= 50 ? "in the green arc, the normal operating range" : v >= 40 ? "in the white arc only, below normal flying speed with flaps up" : "below the arcs, too slow to fly";
+    return `${v} kt, ${band}.`;
+  }
+  if (key === "ai") {
+    const p = s.pitch > 1 ? `nose ${s.pitch}° up` : s.pitch < -1 ? `nose ${-s.pitch}° down` : "nose level";
+    const b = Math.abs(s.bank) > 2 ? `banked ${Math.abs(s.bank)}° ${s.bank < 0 ? "left" : "right"}` : "wings level";
+    return `${p}, ${b}.`;
+  }
+  if (key === "alt") return `${a.toLocaleString("en-US")} ft: short hand at ${(a % 10000 / 1000).toFixed(1)} (thousands), long hand at ${(a % 1000 / 100).toFixed(1)} (hundreds).`;
+  return `${fmtHdg(s.hdg)}°, roughly ${["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][Math.round(s.hdg / 45) % 8]}.`;
+}
+// Turn {{Term|label}} into dictionary links (same markup the lessons use).
+const labTerms = (html) => html.replace(/\{\{([^}|]+)(?:\|([^}]+))?\}\}/g, (_, t, label) => `<a class="term-link" data-term="${esc(t)}">${esc(label || t)}</a>`);
+
+function renderLabInfo() {
+  const key = lab.sel, d = LAB_INFO[key];
+  $$(".lab-inst").forEach((b) => b.classList.toggle("sel", b.dataset.inst === key));
+  $("#labInfo").innerHTML = `<div class="label">${esc(d.name)}${d.aka ? ` · ${esc(d.aka)}` : ""}</div>
+    ${lab.q && !lab.q.done ? "" : `<p class="lab-now"><b>Right now:</b> ${esc(labNow(key))}</p>`}
+    <div class="lab-facts"><div><h5>What it shows</h5><p>${d.shows}</p></div><div><h5>How it works</h5><p>${labTerms(d.works)}</p></div>
+    <div><h5>How to read it</h5><p>${d.read}</p></div><div><h5>Watch out</h5><p>${d.watch}</p></div></div>
+    <a class="term-link" data-term="${esc(d.term)}">Open "${esc(d.term)}" in the dictionary →</a>`;
+}
+
+function labLoop(t) {
+  if (!lab.flying) return;
+  if (!$("#labPanel").offsetParent) { labStop(); return; } // tool hidden or page changed
+  const dt = Math.min((t - (lab.last || t)) / 1000, 0.1); lab.last = t;
+  lab.hdg = (lab.hdg + labTurn() * dt + 360) % 360;
+  lab.alt = Math.max(0, Math.min(12000, lab.alt + labVS() / 60 * dt));
+  const target = Math.max(0, 115 - lab.pitch * 4 - Math.abs(lab.bank) * 0.3); // nose up bleeds speed, nose down gains it
+  lab.spd += (target - lab.spd) * Math.min(1, 0.3 * dt);
+  renderLab();
+  requestAnimationFrame(labLoop);
+}
+function labStop() { lab.flying = false; $("#labFly").textContent = "▶ Fly"; $("#labFly").classList.remove("on"); }
+
+// ---- "Read the instruments" practice ----
+const LAB_Q = ["alt", "hdg", "asi", "ai"];
+function labNewQuestion() {
+  labStop();
+  const type = LAB_Q[lab.asked % 4], r = (lo, hi, step) => lo + step * Math.floor(Math.random() * ((hi - lo) / step + 1));
+  const uniq = (v, i, arr) => arr.indexOf(v) === i;
+  let answer, opts, prompt, why;
+  if (type === "alt") {
+    lab.alt = r(1050, 9850, 50); lab.pitch = 0; lab.bank = 0;
+    const a = lab.alt, th = Math.floor(a / 1000), hu = a % 1000, swapped = Math.floor(hu / 100) * 1000 + th * 100 + (a % 100);
+    opts = [a, swapped, a + 1000, a - 500, a - 1000, a + 500].filter((v) => v > 0).filter(uniq).slice(0, 4).map((v) => [v, v.toLocaleString("en-US") + " ft"]);
+    answer = a; prompt = "What altitude is the <b>altimeter</b> showing?";
+    why = `Short hand past ${th} → ${th},000 ft. Long hand at ${(hu / 100).toFixed(1)} → ${hu} ft. Total ${a.toLocaleString("en-US")} ft.`;
+  } else if (type === "hdg") {
+    lab.hdg = r(10, 350, 10); lab.bank = 0;
+    const h = lab.hdg; answer = h;
+    opts = [h, (h + 180) % 360, (h + 30) % 360, (360 - h) % 360, (h + 330) % 360].filter(uniq).slice(0, 4).map((v) => [v, fmtHdg(v) + "°"]);
+    prompt = "What heading is the <b>heading indicator</b> showing?";
+    why = `The number under the top line is ${fmtHdg(h)}°. ${h % 30 ? "It sits between two numbers, so count the long ticks (10° each) from the nearest one." : `The card shows "${h / 10}", which means ${fmtHdg(h)}° (the last zero is left off).`}`;
+  } else if (type === "asi") {
+    lab.spd = r(45, 175, 5); lab.pitch = 0; lab.bank = 0;
+    const v = lab.spd; answer = v;
+    opts = [v, ...shuffle([v + 10, v - 10, v + 20, v - 20].filter((x) => x > 0)).slice(0, 3)].map((x) => [x, x + " kt"]);
+    prompt = "What is the <b>indicated airspeed</b>?";
+    why = `The needle points at ${v} kt, ${labNow("asi").replace(/^\d+ kt, /, "")}`;
+  } else {
+    const ps = [-8, 0, 10], bs = [-30, 0, 30];
+    const words = (p, b) => `${p > 0 ? "Nose up" : p < 0 ? "Nose down" : "Nose level"}, ${b < 0 ? "banked left" : b > 0 ? "banked right" : "wings level"}`;
+    do { lab.pitch = ps[Math.random() * 3 | 0]; lab.bank = bs[Math.random() * 3 | 0]; } while (!lab.pitch && !lab.bank);
+    answer = words(lab.pitch, lab.bank);
+    opts = [answer, ...shuffle(ps.flatMap((p) => bs.map((b) => words(p, b))).filter((w) => w !== answer)).slice(0, 3)].map((w) => [w, w]);
+    prompt = "What is the aircraft doing, according to the <b>attitude indicator</b>?";
+    why = "The little aircraft symbol above the horizon line means nose up, below means nose down. The horizon tilts the opposite way to the bank, so if its right side is lower you're banked left. The pointer at the top shows the same thing.";
+  }
+  lab.sel = type;
+  lab.q = { answer, why, tried: false, done: false };
+  lab.asked++;
+  renderLab(); renderLabInfo();
+  $("#labQuiz").innerHTML = `<p>${prompt}</p><div class="q-opts lab-opts">${shuffle(opts).map(([v, label]) => `<button type="button" class="q-opt" data-v="${esc(v)}">${esc(label)}</button>`).join("")}</div>
+    <p class="tip hidden" id="labWhy"></p><div class="row"><span class="lab-score">Score ${lab.score} / ${lab.asked - 1}</span><button class="btn ghost" id="labNext" type="button">Skip →</button></div>`;
+  $("#labPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+function labAnswer(btn) {
+  const q = lab.q; if (!q || q.done) return;
+  const ok = btn.dataset.v === String(q.answer);
+  btn.classList.add(ok ? "right" : "wrong");
+  const why = $("#labWhy"); why.classList.remove("hidden");
+  if (ok) {
+    q.done = true;
+    if (!q.tried) { lab.score++; addXP(3, "Instrument read"); }
+    why.textContent = "✅ " + q.why;
+    $(".lab-score").textContent = `Score ${lab.score} / ${lab.asked}`;
+    $("#labNext").textContent = "Next question →";
+    renderLabInfo();
+  } else {
+    q.tried = true;
+    why.textContent = "Not quite. Look again, and check the reading tips below the instruments.";
+  }
+}
+
+function initInstrumentLab() {
+  buildLabPanel();
+  $("#labPanel").addEventListener("click", (e) => { const b = e.target.closest(".lab-inst"); if (b) { lab.sel = b.dataset.inst; renderLabInfo(); } });
+  const bind = (id, key) => $("#" + id).addEventListener("input", (e) => { lab[key] = +e.target.value; lab.q = null; renderLab(); });
+  bind("labPitch", "pitch"); bind("labBank", "bank"); bind("labSpd", "spd"); bind("labAlt", "alt"); bind("labHdg", "hdg");
+  $("#labFly").onclick = () => {
+    if (lab.flying) { labStop(); return; }
+    lab.flying = true; lab.last = 0; lab.q = null;
+    $("#labFly").textContent = "⏸ Pause"; $("#labFly").classList.add("on");
+    requestAnimationFrame(labLoop);
+  };
+  const PRESETS = { cruise: [0, 0, 115], climb: [8, 0, 85], descent: [-5, 0, 135], left: [1, -25, 105], right: [1, 25, 105], slow: [12, 0, 55] };
+  $("#labPreset").onchange = (e) => {
+    const p = PRESETS[e.target.value]; if (!p) return;
+    [lab.pitch, lab.bank, lab.spd] = p; lab.q = null; e.target.value = "";
+    renderLab();
+  };
+  $("#labQuiz").addEventListener("click", (e) => {
+    const o = e.target.closest(".q-opt"); if (o) { labAnswer(o); return; }
+    if (e.target.id === "labNext" || e.target.id === "labStart") labNewQuestion();
+  });
+  $("#labQuiz").innerHTML = `<p class="sub">The lab sets the instruments to a random reading and you say what they show. 3 XP for each one you get right first time.</p><button class="btn" id="labStart" type="button">Start reading practice</button>`;
+  renderLab();
+}
+initInstrumentLab(); // after the lab constants above are defined
