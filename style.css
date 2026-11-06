@@ -771,3 +771,124 @@ a.btn { text-decoration: none; display: inline-block; }
 [data-theme="night"] .lab-facts > div { background-color: rgba(10, 18, 42, .7); }
 [data-theme="night"] .lab-panel { background: linear-gradient(180deg, #0d1530, #070d1f); box-shadow: inset 0 2px 0 rgba(255,255,255,.05), 0 0 0 1px var(--line); }
 [data-theme="night"] .lab-now { box-shadow: 0 0 0 1px rgba(120,160,255,.22); }
+
+/* ===== Interactive Aviation Laboratory ===== */
+.lab-cards .badge { margin-top: .8rem; }
+.readout.warn { background: #7f1d1d; animation: labBlink 1s steps(2) infinite; }
+.aero-ctl { display: block; font: 700 .72rem var(--font-hud); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: .6rem; }
+.aero-ctl span { float: right; color: var(--text); font: 700 .85rem var(--font-mono); text-transform: none; letter-spacing: 0; }
+.aero-ctl input[type="range"] { width: 100%; accent-color: var(--accent2); padding: 0; background: none; border: 0; box-shadow: none; margin-top: .2rem; }
+.seg { flex-wrap: wrap; }
+
+/* Four forces */
+.ff-modehint { color: var(--muted); font-size: .88rem; flex: 1; min-width: 200px; }
+.ff-wrap { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(230px, 1fr); gap: 1.25rem; margin-top: .5rem; }
+@media (max-width: 860px) { .ff-wrap { grid-template-columns: 1fr; } }
+.ff-scene { width: 100%; display: block; border-radius: 12px; border: 1px solid var(--line); }
+.ff-readouts { margin-top: .6rem; }
+.ff-sky1 { stop-color: #9cc3ff; } .ff-sky2 { stop-color: #f6e8f6; }
+.ff-clouds ellipse { fill: rgba(255,255,255,.85); } .ff-clouds.far ellipse { fill: rgba(255,255,255,.55); }
+.ff-ground { fill: #9fd3a8; } .ff-runway { fill: #5b6475; } .ff-dash { stroke: #fff; stroke-width: 2; stroke-dasharray: 26 34; }
+.ff-body { fill: #f8fafc; stroke: #1e3a8a; stroke-width: 1.5; } .ff-tail { fill: #2563eb; } .ff-wing { fill: #1e3a8a; }
+.ff-window { fill: #93c5fd; } .ff-gear { stroke: #334155; stroke-width: 2.5; } .ff-wheel { fill: #1f2937; }
+.ff-prop { fill: rgba(30,41,59,.35); }
+.ff-arrow line { stroke-width: 6; stroke-linecap: round; } .ff-arrow text { font: 700 12px var(--font-hud); letter-spacing: .04em; paint-order: stroke; stroke: rgba(255,255,255,.85); stroke-width: 3px; }
+.ff-arrow.lift line { stroke: #2563eb; } .ff-arrow.lift polygon, .ff-arrow.lift text { fill: #2563eb; }
+.ff-arrow.weight line { stroke: #db2777; } .ff-arrow.weight polygon, .ff-arrow.weight text { fill: #db2777; }
+.ff-arrow.thrust line { stroke: #16a34a; } .ff-arrow.thrust polygon, .ff-arrow.thrust text { fill: #16a34a; }
+.ff-arrow.drag line { stroke: #d97706; } .ff-arrow.drag polygon, .ff-arrow.drag text { fill: #d97706; }
+.ff-arrow.net line { stroke: #0f1f45; stroke-width: 3; stroke-dasharray: 6 5; } .ff-arrow.net polygon, .ff-arrow.net text { fill: #0f1f45; }
+.ff-arrow.net text { font-size: 11px; }
+.ff-ctl.ff-L input { accent-color: #2563eb; } .ff-ctl.ff-W input { accent-color: #db2777; }
+.ff-ctl.ff-T input, .ff-ctl.ff-thr input { accent-color: #16a34a; } .ff-ctl.ff-D input { accent-color: #d97706; }
+.ff-side .chips { margin-top: .3rem; }
+
+/* Aerodynamics */
+.aero-wrap { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(240px, 1fr); gap: 1.25rem; }
+@media (max-width: 860px) { .aero-wrap { grid-template-columns: 1fr; } }
+#aeroCanvas { width: 100%; display: block; border-radius: 12px; border: 1px solid var(--line); background: #ecf3ff; }
+.aero-legend { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin-top: .4rem; }
+.aero-legend i { display: inline-block; width: 22px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: .35rem; }
+.aero-legend i.slow { background: #3b82f6; } .aero-legend i.fast { background: #ec4899; }
+.aero-chart { width: 100%; display: block; margin: .3rem 0 .4rem; background: rgba(255,255,255,.5); border: 1px solid var(--line); border-radius: 10px; }
+.ac-axis { stroke: var(--muted); stroke-width: 1; opacity: .6; }
+.ac-other { fill: none; stroke: var(--muted); stroke-width: 1.2; opacity: .3; }
+.ac-line { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.ac-stall { stroke: var(--red); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.ac-dot { fill: var(--accent2); stroke: #fff; stroke-width: 2; }
+.ac-lbl { fill: var(--muted); font: 600 9px var(--font-hud); letter-spacing: .05em; } .ac-lbl.end { text-anchor: end; } .ac-lbl.warn { fill: var(--red); }
+.wing-wrap { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(0, 1.4fr); gap: 1.25rem; align-items: center; margin-top: .8rem; }
+@media (max-width: 760px) { .wing-wrap { grid-template-columns: 1fr; } }
+.wing-svg { width: 100%; display: block; background: rgba(255,255,255,.5); border: 1px solid var(--line); border-radius: 12px; }
+.wing-shape { fill: #60a5fa; stroke: #1e3a8a; stroke-width: 2; transition: d .3s; }
+.wing-fuse { fill: #1e3a8a; } .wing-lbl { fill: var(--muted); font: 600 9px var(--font-hud); text-anchor: middle; letter-spacing: .08em; }
+.wing-info p { margin: .35rem 0; }
+
+/* Engines */
+.eng-wrap { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(240px, 1fr); gap: 1.25rem; margin-top: .6rem; }
+@media (max-width: 860px) { .eng-wrap { grid-template-columns: 1fr; } }
+#engSvg { width: 100%; display: block; border-radius: 12px; background: linear-gradient(180deg, #eef4ff, #f8fbff); border: 1px solid var(--line); }
+.eng-throttle { margin-top: .6rem; }
+.eng-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; margin-top: .6rem; }
+.eng-steps span { text-align: center; font: 700 .7rem var(--font-hud); letter-spacing: .06em; text-transform: uppercase; padding: .45rem .3rem; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); transition: all .15s; }
+.eng-steps span.on { background: var(--accent2); border-color: var(--accent2); color: #fff; box-shadow: 0 3px 10px rgba(236,72,153,.35); }
+.eng-part { min-height: 7.5rem; }
+.eng-facts p { margin: .35rem 0; font-size: .92rem; }
+.eng-readouts { grid-template-columns: 1fr 1fr; margin: 0 0 .7rem; }
+.eng-nacelle { fill: #cbd5e1; stroke: #64748b; stroke-width: 1; }
+.eng-casing { fill: #94a3b8; stroke: #475569; stroke-width: 1; }
+.eng-hubbody { fill: #64748b; }
+.eng-blade { stroke-width: 3; stroke-dasharray: 5 3; }
+.eng-blade.comp { stroke: #3b82f6; } .eng-blade.turb { stroke: #ea580c; } .eng-blade.fan { stroke: #1e3a8a; stroke-width: 6; stroke-dasharray: 12 5; }
+.eng-flame { fill: #fb923c; opacity: .45; } .eng-flame.f1 { fill: #fbbf24; } .eng-flame.f2 { fill: #fef08a; }
+.eng-gear { fill: none; stroke: #475569; stroke-width: 3; stroke-dasharray: 3 2; } .eng-gear.b { stroke: #64748b; }
+.eng-disc { fill: rgba(100,116,139,.35); }
+.eng-blade-prop { stroke: #1e293b; stroke-width: 8; stroke-linecap: round; }
+.eng-spinner { fill: #475569; }
+.eng-pt { pointer-events: none; }
+.eng-hit { fill: transparent; cursor: pointer; }
+.eng-hit:hover { fill: rgba(236,72,153,.1); }
+.eng-hit.sel { fill: rgba(236,72,153,.16); stroke: var(--accent2); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.eng-lbl { font: 700 10px var(--font-hud); fill: var(--muted); text-anchor: middle; text-transform: uppercase; letter-spacing: .06em; cursor: pointer; }
+.eng-lbl.sel { fill: var(--accent2); }
+.eng-small { font: 600 10px var(--font-hud); fill: var(--muted); letter-spacing: .04em; }
+.eng-stroke { font: 800 18px var(--font-hud); fill: var(--accent2); letter-spacing: .06em; }
+.eng-shaft { stroke: #64748b; stroke-width: 6; }
+.eng-pipe { fill: #cbd5e1; stroke: #64748b; } .eng-pipe.flow.in { fill: #93c5fd; } .eng-pipe.flow.out { fill: #9ca3af; }
+.eng-plug { fill: #e2e8f0; stroke: #475569; }
+.eng-spark { fill: #fde047; opacity: 0; filter: drop-shadow(0 0 6px #facc15); }
+.eng-gas { fill: #93c5fd; }
+.eng-stem { stroke: #475569; stroke-width: 3; } .eng-valve { fill: #334155; }
+.eng-piston { fill: #94a3b8; stroke: #334155; stroke-width: 1.5; }
+.eng-crankcase { fill: rgba(148,163,184,.25); stroke: #64748b; stroke-width: 2; }
+.eng-rod { stroke: #475569; stroke-width: 8; stroke-linecap: round; } .eng-arm { stroke: #334155; stroke-width: 10; stroke-linecap: round; }
+.eng-hub { fill: #1e293b; }
+.eng-table-wrap { overflow-x: auto; }
+.eng-table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: .9rem; background: rgba(255,255,255,.5); }
+.eng-table th { background: var(--navy); color: #fff; font: 600 .78rem var(--font-hud); text-transform: uppercase; letter-spacing: .1em; padding: .5rem .6rem; text-align: left; }
+.eng-table td { border-top: 1px solid var(--line); padding: .5rem .6rem; vertical-align: top; }
+
+/* Lab — night */
+[data-theme="night"] .ff-sky1 { stop-color: #0b1a3d; } [data-theme="night"] .ff-sky2 { stop-color: #2a1840; }
+[data-theme="night"] .ff-clouds ellipse { fill: rgba(148,163,184,.28); } [data-theme="night"] .ff-clouds.far ellipse { fill: rgba(148,163,184,.16); }
+[data-theme="night"] .ff-ground { fill: #12301f; } [data-theme="night"] .ff-runway { fill: #2b3242; }
+[data-theme="night"] .ff-body { fill: #cbd5e1; } [data-theme="night"] .ff-tail { fill: #60a5fa; } [data-theme="night"] .ff-wing { fill: #1e40af; }
+[data-theme="night"] .ff-arrow text { stroke: rgba(7,13,31,.85); }
+[data-theme="night"] .ff-arrow.lift line { stroke: #60a5fa; } [data-theme="night"] .ff-arrow.lift polygon, [data-theme="night"] .ff-arrow.lift text { fill: #60a5fa; }
+[data-theme="night"] .ff-arrow.weight line { stroke: #f472b6; } [data-theme="night"] .ff-arrow.weight polygon, [data-theme="night"] .ff-arrow.weight text { fill: #f472b6; }
+[data-theme="night"] .ff-arrow.thrust line { stroke: #4ade80; } [data-theme="night"] .ff-arrow.thrust polygon, [data-theme="night"] .ff-arrow.thrust text { fill: #4ade80; }
+[data-theme="night"] .ff-arrow.drag line { stroke: #fbbf24; } [data-theme="night"] .ff-arrow.drag polygon, [data-theme="night"] .ff-arrow.drag text { fill: #fbbf24; }
+[data-theme="night"] .ff-arrow.net line { stroke: #e2e8f0; } [data-theme="night"] .ff-arrow.net polygon, [data-theme="night"] .ff-arrow.net text { fill: #e2e8f0; }
+[data-theme="night"] #aeroCanvas { background: #060c1e; }
+[data-theme="night"] .aero-chart, [data-theme="night"] .wing-svg, [data-theme="night"] .eng-table { background-color: rgba(10, 18, 42, .7); }
+[data-theme="night"] .ac-dot { stroke: #0a1430; }
+[data-theme="night"] .wing-shape { fill: #2563eb; stroke: #93c5fd; } [data-theme="night"] .wing-fuse { fill: #93c5fd; }
+[data-theme="night"] #engSvg { background: linear-gradient(180deg, #0b1630, #070d1f); }
+[data-theme="night"] .eng-nacelle { fill: #334155; stroke: #64748b; } [data-theme="night"] .eng-casing { fill: #475569; stroke: #94a3b8; }
+[data-theme="night"] .eng-hubbody { fill: #64748b; } [data-theme="night"] .eng-blade.fan { stroke: #93c5fd; }
+[data-theme="night"] .eng-blade-prop { stroke: #cbd5e1; } [data-theme="night"] .eng-spinner { fill: #94a3b8; }
+[data-theme="night"] .eng-pipe { fill: #334155; } [data-theme="night"] .eng-plug { fill: #64748b; }
+[data-theme="night"] .eng-piston { fill: #64748b; stroke: #cbd5e1; } [data-theme="night"] .eng-rod { stroke: #94a3b8; } [data-theme="night"] .eng-arm { stroke: #cbd5e1; }
+[data-theme="night"] .eng-hub { fill: #e2e8f0; } [data-theme="night"] .eng-shaft { stroke: #94a3b8; }
+[data-theme="night"] .eng-steps span { background-color: rgba(10, 18, 42, .7); }
+[data-theme="night"] .eng-steps span.on { background-color: var(--accent2); }

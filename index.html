@@ -19,6 +19,7 @@
     <a href="#home" data-page="home">Home</a>
     <a href="#dashboard" data-page="dashboard">Dashboard</a>
     <a href="#academy" data-page="academy">Academy</a>
+    <a href="#lab" data-page="lab">Lab</a>
     <a href="#atc" data-page="atc">ATC &amp; Comms</a>
     <a href="#dictionary" data-page="dictionary">Dictionary</a>
     <a href="#aircraft" data-page="aircraft">Aircraft</a>
@@ -94,6 +95,7 @@
   <h2>Main features</h2>
   <div class="grid features">
     <a class="card link" href="#academy"><div class="card-ico">🎓</div><h3>Academy</h3><p>Learn about aircraft, aerodynamics, navigation, and aviation.</p><span class="go">Start learning →</span></a>
+    <a class="card link" href="#lab"><div class="card-ico">🧪</div><h3>Aviation Lab</h3><p>Experiment with the four forces, airflow over a wing, aircraft engines, and cockpit instruments.</p><span class="go">Start experimenting →</span></a>
     <a class="card link" href="#atc"><div class="card-ico">🎧</div><h3>ATC &amp; Communications</h3><p>Understand pilots, control towers, VHF, and radio communication.</p><span class="go">Tune in →</span></a>
     <a class="card link" href="#dictionary"><div class="card-ico">📖</div><h3>Aviation Dictionary</h3><p>Search words like VHF, PMR, ILS, IFR, and transponder — <span id="termCount">140</span> terms.</p><span class="go">Look up a word →</span></a>
     <a class="card link" href="#quiz"><div class="card-ico">🏆</div><h3>Knowledge Check</h3><p>Take aviation quizzes and review with flashcards.</p><span class="go">Test yourself →</span></a>
@@ -177,7 +179,20 @@
   <div class="progress-wrap"><span class="pw-label">Academy progress</span><div class="progress"><div class="bar" id="academyBar"></div></div><span id="academyPct">0%</span></div>
   <div id="academyLessons"></div>
   <h2 class="mt">Academy tools</h2>
-  <div class="tool-group" data-tools="instruments,metar,axes,convert"></div>
+  <div class="tool-group" data-tools="metar,axes,convert"></div>
+</section>
+
+<!-- ================= LAB ================= -->
+<section id="page-lab" class="page">
+  <h2>Interactive Aviation Laboratory</h2>
+  <p class="sub">This is where you learn by experimenting instead of just reading. Pick an experiment, change things, and watch what happens.</p>
+  <div class="grid cards lab-cards">
+    <a class="card link" href="#lab/forces"><div class="card-ico">⚖️</div><h3>Four Forces Simulator</h3><p>Adjust lift, drag, thrust, and weight and see how they affect a simplified aircraft model.</p><span class="badge">Interactive</span></a>
+    <a class="card link" href="#lab/aero"><div class="card-ico">🌬️</div><h3>Aerodynamics Lab</h3><p>Explore wing shapes, airflow, angle of attack, and basic flight principles.</p><span class="badge">Interactive</span></a>
+    <a class="card link" href="#lab/engines"><div class="card-ico">⚙️</div><h3>Engine Explorer</h3><p>Discover how turbofan, turboprop, piston, and turbojet engines work.</p><span class="badge custom">Aircraft technology</span></a>
+    <a class="card link" href="#lab/instruments"><div class="card-ico">🎛️</div><h3>Cockpit Instrument Lab</h3><p>Learn to read the altimeter, airspeed indicator, heading indicator, and artificial horizon.</p><span class="badge">Interactive</span></a>
+  </div>
+  <div class="tool-group" id="labGroup" data-tools="forces,aero,engines,instruments"></div>
 </section>
 
 <!-- ================= ATC & COMMS ================= -->
@@ -341,6 +356,76 @@
     <p class="sub">Logarithmic view of the radio spectrum from 100 kHz to 3 GHz. Hover or tap a band to learn more. Notice PMR446 sits far away from the aviation bands.</p>
     <div id="spectrum" class="spectrum"></div>
     <div id="specInfo" class="spec-info">Tap a coloured band.</div>
+  </div>
+
+  <!-- Four Forces Simulator -->
+  <div class="tool card" id="tool-forces" data-label="⚖️ Four Forces">
+    <h3>Four Forces Simulator</h3>
+    <p class="sub">Every aircraft in flight has four forces acting on it. When they balance, it flies steadily. When they don't, it speeds up, slows down, climbs, or sinks.</p>
+    <div class="row">
+      <div class="seg" id="ffMode"><button type="button" data-mode="direct" class="active">Set the forces</button><button type="button" data-mode="real">Realistic physics</button></div>
+      <span class="ff-modehint" id="ffModeHint">Drag the four sliders. Lift and drag are set directly, so you can explore each force on its own.</span>
+    </div>
+    <div class="ff-wrap">
+      <div class="ff-scene-box"><svg class="ff-scene" id="ffScene" viewBox="0 0 640 320" role="img" aria-label="Aircraft with the four forces drawn as arrows"></svg>
+        <div class="readouts ff-readouts"><div class="readout"><small>AIRSPEED</small><b id="ffSpd">100 kt</b></div><div class="readout"><small>V/S FPM</small><b id="ffVS">0</b></div><div class="readout"><small>ALTITUDE</small><b id="ffAlt" class="pink">3,000 ft</b></div></div>
+      </div>
+      <div class="ff-side">
+        <div id="ffSliders"></div>
+        <div class="label">Try a scenario</div>
+        <div class="chips" id="ffPresets"></div>
+        <button class="btn ghost" type="button" id="ffReset">↺ Reset</button>
+      </div>
+    </div>
+    <p class="tip" id="ffTip"></p>
+  </div>
+
+  <!-- Aerodynamics Lab -->
+  <div class="tool card" id="tool-aero" data-label="🌬️ Aerodynamics">
+    <h3>Aerodynamics Lab</h3>
+    <p class="sub">A wind tunnel in your browser. Tilt the wing (angle of attack), change its shape, and watch the air flow around it. Faster air shows in pink, slower air in blue.</p>
+    <div class="aero-wrap">
+      <div class="aero-tunnel"><canvas id="aeroCanvas" width="760" height="380" aria-label="Airflow around a wing section"></canvas>
+        <div class="aero-legend"><span><i class="slow"></i>slower air · higher pressure</span><span><i class="fast"></i>faster air · lower pressure</span></div>
+      </div>
+      <div class="aero-side">
+        <label class="aero-ctl">Angle of attack <span id="aeroAoaV">5°</span><input type="range" id="aeroAoa" min="-5" max="22" value="5"></label>
+        <label class="aero-ctl">Airspeed <span id="aeroSpdV">100 kt</span><input type="range" id="aeroSpd" min="40" max="200" step="5" value="100"></label>
+        <div class="label">Wing section (airfoil)</div>
+        <div class="chips" id="aeroShapes"></div>
+        <svg class="aero-chart" id="aeroChart" viewBox="0 0 260 150" aria-label="Lift coefficient against angle of attack"></svg>
+        <div class="readouts aero-readouts"><div class="readout"><small>LIFT COEFF.</small><b id="aeroCL">0.00</b></div><div class="readout"><small>LIFT</small><b id="aeroLift" class="pink">0%</b></div><div class="readout"><small>STATE</small><b id="aeroState">FLYING</b></div></div>
+      </div>
+    </div>
+    <p class="tip" id="aeroTip"></p>
+    <h4>Wing shapes from above (planform)</h4>
+    <div class="seg" id="wingSeg"></div>
+    <div class="wing-wrap"><svg class="wing-svg" id="wingSvg" viewBox="-160 -20 320 150" aria-label="Wing planform"></svg><div id="wingInfo" class="wing-info"></div></div>
+    <h4>So how does a wing make lift?</h4>
+    <div class="grid three lab-facts">
+      <div><h5>Turning the air</h5><p>A wing at an angle pushes air <b>downward</b> behind it (downwash). Push air down, and the air pushes the wing up. That's Newton's third law.</p></div>
+      <div><h5>Pressure difference</h5><p>Air over the curved top speeds up and its pressure drops. Air underneath is slower, with higher pressure. The difference pushes the wing up (Bernoulli).</p></div>
+      <div><h5>Same thing, two views</h5><p>These aren't rival theories. They describe the same airflow. More angle means more turning, a bigger pressure difference and more lift, until the wing stalls.</p></div>
+    </div>
+  </div>
+
+  <!-- Engine Explorer -->
+  <div class="tool card" id="tool-engines" data-label="⚙️ Engines">
+    <h3>Engine Explorer</h3>
+    <p class="sub">Pick an engine, open the throttle, and click any part to learn what it does. Most aircraft engines follow the same four steps: <b>suck, squeeze, bang, blow</b>.</p>
+    <div class="row"><div class="seg" id="engSeg"></div></div>
+    <div class="eng-wrap">
+      <div class="eng-view"><svg id="engSvg" viewBox="0 0 640 282" aria-label="Engine cutaway"></svg>
+        <div class="eng-steps" id="engSteps"></div>
+        <label class="aero-ctl eng-throttle">Throttle <span id="engThrV">60%</span><input type="range" id="engThr" min="0" max="100" value="60"></label>
+      </div>
+      <div class="eng-side">
+        <div class="eng-part" id="engPart"></div>
+        <div class="eng-facts" id="engFacts"></div>
+      </div>
+    </div>
+    <h4>Compare the engines</h4>
+    <div class="eng-table-wrap"><table class="eng-table" id="engTable"></table></div>
   </div>
 
   <!-- Cockpit Instrument Lab -->

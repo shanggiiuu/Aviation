@@ -9,7 +9,7 @@ const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { co
 // Global keys are shared by everyone on this device; all other keys belong to the active profile.
 // The built-in "guest" profile uses the original un-prefixed keys, so earlier progress is kept.
 const GLOBAL_KEYS = ["posts", "profiles", "current"];
-const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest"];
+const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone"];
 const rawGet = (key, def) => { try { const v = localStorage.getItem(key); return v === null ? def : JSON.parse(v); } catch { return def; } };
 const rawSet = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 let CURRENT = rawGet("sky_current", "guest");
@@ -61,7 +61,7 @@ document.addEventListener("click", (e) => {
 });
 
 // ================= Router =================
-const pages = ["home", "dashboard", "academy", "atc", "dictionary", "aircraft", "quiz", "community", "profile"];
+const pages = ["home", "dashboard", "academy", "lab", "atc", "dictionary", "aircraft", "quiz", "community", "profile"];
 const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer" };
 const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy" }; // old links keep working
 function route() {
@@ -76,6 +76,7 @@ function route() {
   const anchor = PAGE_ANCHORS[p + "/" + rest.join("/")];
   if (anchor) setTimeout(() => $(anchor).scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   else window.scrollTo({ top: 0 });
+  if (p === "lab" && rest[0] && $("#tool-" + rest[0])) setTimeout(() => showTool(rest[0], true), 50);
 }
 window.addEventListener("hashchange", route);
 
@@ -1964,3 +1965,569 @@ function initInstrumentLab() {
   renderLab();
 }
 initInstrumentLab(); // after the lab constants above are defined
+
+// ================= Interactive Aviation Laboratory =================
+// Shared helpers for the Lab page experiments (Four Forces, Aerodynamics, Engines).
+const SVGNS = "http://www.w3.org/2000/svg";
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+// Piecewise-linear lookup in [[x, value], ...] (sorted by x).
+const pw = (pts, x) => {
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); }
+  return pts[pts.length - 1][1];
+};
+// One-time XP per profile for each experiment milestone.
+function labAward(key, msg) {
+  const done = store.get("labDone", []);
+  if (done.includes(key)) return;
+  done.push(key); store.set("labDone", done); addXP(5, msg);
+}
+const isNight = () => document.documentElement.dataset.theme === "night";
+
+// ---------- Four Forces Simulator ----------
+// Two modes: "direct" sets the four forces straight from the sliders; "real" sets throttle, angle of attack and weight,
+// and lift/drag come from speed² × coefficient, so the aircraft settles where the forces balance.
+const FF = { mode: "direct", L: 60, D: 30, T: 30, W: 60, thr: 52, aoa: 4, spd: 100, vs: 0, alt: 3000, scroll: 0 };
+const FF_SLIDERS = {
+  direct: [["L", "Lift", 0, 100], ["W", "Weight", 20, 100], ["T", "Thrust", 0, 100], ["D", "Drag", 0, 100]],
+  real: [["thr", "Throttle (thrust)", 0, 100, "%"], ["aoa", "Angle of attack", -4, 20, "°"], ["W", "Weight (load)", 30, 90]],
+};
+const FF_PRESETS = {
+  direct: [
+    ["Steady cruise", { L: 60, W: 60, T: 30, D: 30 }], ["Climb", { L: 72, W: 60, T: 45, D: 30 }], ["Descend", { L: 48, W: 60, T: 25, D: 30 }],
+    ["Speed up", { L: 60, W: 60, T: 55, D: 30 }], ["Engine off", { L: 56, W: 60, T: 0, D: 25 }], ["Overloaded", { L: 60, W: 95, T: 30, D: 30 }],
+  ],
+  real: [
+    ["Steady cruise", { thr: 52, aoa: 4, W: 60 }, { spd: 100, alt: 3000, vs: 0 }], ["Takeoff", { thr: 100, aoa: 8, W: 60 }, { spd: 0, alt: 0, vs: 0 }],
+    ["Full power climb", { thr: 95, aoa: 6, W: 60 }], ["Engine off (glide)", { thr: 0, aoa: 4, W: 60 }],
+    ["Stall", { thr: 35, aoa: 17, W: 60 }, { spd: 75 }], ["Heavy load", { thr: 52, aoa: 4, W: 85 }],
+  ],
+};
+const ffCL = (a) => (a <= 15 ? 0.2 + 0.1 * a : Math.max(0.6, 1.7 - 0.12 * (a - 15)));
+function ffForces() {
+  if (FF.mode !== "real") return;
+  const cl = ffCL(FF.aoa), cd = 0.03 + 0.06 * cl * cl + (FF.aoa > 15 ? 0.15 : 0), q = FF.spd * FF.spd;
+  FF.T = 0.6 * FF.thr; FF.L = 0.01 * q * cl; FF.D = 0.06 * q * cd;
+}
+function ffStep(dt) {
+  ffForces();
+  // Speed: thrust minus drag accelerates; climbing trades speed for height (and diving the reverse).
+  FF.spd = clamp(FF.spd + ((FF.T - FF.D) / FF.W * 25 - FF.vs * 0.003) * dt, 0, 250);
+  const target = clamp((FF.L - FF.W) / FF.W * 4000, -3000, 3000);
+  FF.vs += (target - FF.vs) * Math.min(1, 1.5 * dt);
+  FF.alt += FF.vs / 60 * dt * 3; // sped up ×3 so height changes are easy to see
+  if (FF.alt <= 0) { FF.alt = 0; FF.vs = Math.max(FF.vs, 0); }
+  if (FF.alt >= 9000) { FF.alt = 9000; FF.vs = Math.min(FF.vs, 0); }
+  FF.scroll += FF.spd * dt * 1.4;
+  ffRender();
+}
+function ffBuildScene() {
+  const clouds = (n, y0, s) => Array.from({ length: n }, (_, i) => {
+    const x = i * (1280 / n) + (i % 2) * 70, y = y0 + (i % 3) * 22;
+    return `<g transform="translate(${x} ${y}) scale(${s})"><ellipse rx="34" ry="13"/><ellipse cx="-20" cy="5" rx="22" ry="10"/><ellipse cx="22" cy="5" rx="24" ry="10"/></g>`; }).join("");
+  const arrow = (id, cls) => `<g id="${id}" class="ff-arrow ${cls}"><line/><polygon/><text/></g>`;
+  $("#ffScene").innerHTML = `
+    <defs><linearGradient id="ffSkyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="ff-sky1"/><stop offset="1" class="ff-sky2"/></linearGradient></defs>
+    <rect width="640" height="320" fill="url(#ffSkyG)"/>
+    <g id="ffClouds2" class="ff-clouds far">${clouds(6, 40, 0.7)}</g>
+    <g id="ffClouds1" class="ff-clouds">${clouds(5, 230, 1)}</g>
+    <g id="ffGround"><rect x="0" y="0" width="640" height="400" class="ff-ground"/><rect x="0" y="0" width="640" height="16" class="ff-runway"/><line x1="0" y1="8" x2="640" y2="8" id="ffDash" class="ff-dash"/></g>
+    <g id="ffPlane" class="ff-plane">
+      <path d="M-62 -4 Q-60 -12 -40 -12 L40 -10 Q62 -8 66 0 Q62 8 40 8 L-40 8 Q-58 8 -62 4 Z" class="ff-body"/>
+      <path d="M-58 -8 L-72 -34 L-60 -34 L-40 -10 Z" class="ff-tail"/><path d="M-66 -1 L-40 -1 L-40 3 L-66 3 Z" class="ff-tail"/>
+      <path d="M-14 -2 L22 -2 L18 3 L-18 3 Z" class="ff-wing"/>
+      <path d="M8 -10 Q20 -18 34 -10 Z" class="ff-window"/>
+      <line x1="0" y1="8" x2="-4" y2="22" class="ff-gear"/><circle cx="-4" cy="22" r="4" class="ff-wheel"/><line x1="44" y1="6" x2="46" y2="22" class="ff-gear"/><circle cx="46" cy="22" r="3.5" class="ff-wheel"/>
+      <ellipse id="ffProp" cx="68" cy="0" rx="3" ry="22" class="ff-prop"/>
+    </g>
+    ${arrow("ffArrL", "lift")}${arrow("ffArrW", "weight")}${arrow("ffArrT", "thrust")}${arrow("ffArrD", "drag")}${arrow("ffArrN", "net")}`;
+}
+function ffArrow(id, x1, y1, x2, y2, label, lx, ly) {
+  const g = $("#" + id), len = Math.hypot(x2 - x1, y2 - y1);
+  g.style.display = len < 3 ? "none" : "";
+  if (len < 3) return;
+  const ux = (x2 - x1) / len, uy = (y2 - y1) / len, hx = x2 - ux * 10, hy = y2 - uy * 10;
+  const ln = $("line", g); ln.setAttribute("x1", x1); ln.setAttribute("y1", y1); ln.setAttribute("x2", hx); ln.setAttribute("y2", hy);
+  $("polygon", g).setAttribute("points", `${x2},${y2} ${hx - uy * 7},${hy + ux * 7} ${hx + uy * 7},${hy - ux * 7}`);
+  const t = $("text", g); t.setAttribute("x", lx ?? x2); t.setAttribute("y", ly ?? y2); t.textContent = label;
+}
+function ffRender() {
+  const cx = 320, cy = 150, s = 1.1, f = FF;
+  const gamma = Math.atan2(f.vs / 101.27, Math.max(f.spd, 1)) * 180 / Math.PI;
+  const pitch = clamp(gamma + (f.mode === "real" ? f.aoa : 2), -30, 30);
+  $("#ffPlane").setAttribute("transform", `translate(${cx} ${cy}) rotate(${-pitch})`);
+  $("#ffProp").style.opacity = f.T > 1 ? 0.35 + f.T / 150 : 0.9;
+  $("#ffProp").setAttribute("ry", f.T > 1 ? 22 : 4);
+  $("#ffGround").setAttribute("transform", `translate(0 ${cy + 26 + f.alt * 0.06})`);
+  $("#ffDash").style.strokeDashoffset = f.scroll % 60;
+  $("#ffClouds1").setAttribute("transform", `translate(${-(f.scroll % 640)} ${(f.alt - 3000) * 0.05})`);
+  $("#ffClouds2").setAttribute("transform", `translate(${-((f.scroll * 0.4) % 640)} ${(f.alt - 3000) * 0.025})`);
+  const r = (v) => Math.round(v);
+  ffArrow("ffArrL", cx, cy - 14, cx, cy - 14 - f.L * s, `Lift ${r(f.L)}`, cx + 10, cy - 18 - f.L * s);
+  ffArrow("ffArrW", cx, cy + 14, cx, cy + 14 + f.W * s, `Weight ${r(f.W)}`, cx + 10, cy + 26 + f.W * s);
+  ffArrow("ffArrT", cx + 72, cy, cx + 72 + f.T * s * 1.4, cy, `Thrust ${r(f.T)}`, cx + 76 + f.T * s * 1.4, cy - 8);
+  ffArrow("ffArrD", cx - 72, cy, cx - 72 - f.D * s * 1.4, cy, `Drag ${r(f.D)}`, cx - 76 - f.D * s * 1.4, cy - 8);
+  const nx = (f.T - f.D) * 2, ny = -(f.L - f.W) * 2;
+  ffArrow("ffArrN", cx, cy, cx + clamp(nx, -150, 150), cy + clamp(ny, -120, 120), "Net force", cx + clamp(nx, -150, 150) + 8, cy + clamp(ny, -120, 120) + 14);
+  $("#ffSpd").textContent = r(f.spd) + " kt";
+  $("#ffVS").textContent = (f.vs > 20 ? "+" : "") + Math.round(f.vs / 10) * 10;
+  $("#ffAlt").textContent = r(f.alt).toLocaleString("en-US") + " ft";
+  ffTip();
+}
+function ffTip() {
+  const f = FF, h = f.T - f.D, v = f.L - f.W, near = (x) => Math.abs(x) < 2;
+  let msg;
+  if (f.mode === "real" && f.aoa > 15) msg = "⚠ <b>Stall!</b> Past about 15° the air can't follow the top of the wing any more. Lift collapses and drag shoots up. Recovery: lower the nose (less angle of attack) and add power.";
+  else if (f.alt <= 0 && v <= 0) msg = f.mode === "real" ? `On the ground. Lift (${Math.round(f.L)}) is still less than weight (${Math.round(f.W)}). Lift grows with speed², so keep accelerating and the wheels will lift off.` : "On the ground. Lift is smaller than weight, so the aircraft can't get airborne. Increase lift above weight to take off.";
+  else if (near(h) && near(v)) msg = "✅ <b>Balanced:</b> lift = weight and thrust = drag. Nothing changes: constant speed, constant height. This is steady cruise. (Balanced forces don't mean stopped; they mean <em>not changing</em>.)";
+  else {
+    const accel = h / f.W * 25 - f.vs * 0.003; // same formula as ffStep
+    const hz = near(h) ? "Thrust equals drag, so the speed holds steady"
+      : Math.abs(accel) < 0.6 ? (h > 0 ? "Thrust is bigger than drag, but the extra is all going into the climb, so the speed holds steady" : "Drag is bigger than thrust, but gravity is helping on the way down, so the speed holds steady")
+      : accel > 0 ? "The aircraft <b>speeds up</b>" + (h > 0 ? " because thrust is bigger than drag" : " because it's diving and gravity is pulling it along")
+      : "The aircraft <b>slows down</b>" + (h < 0 ? " because drag is bigger than thrust" : " because climbing uses up its energy");
+    const vt = near(v) ? "lift equals weight, so it holds its height" : v > 0 ? "lift is bigger than weight, so it <b>climbs</b>" : "weight is bigger than lift, so it <b>sinks</b>";
+    msg = `${hz}, and ${vt}. The dashed arrow shows the net (leftover) force.`;
+    if (f.mode === "real") msg += f.thr === 0 ? " With the engine off it glides: gravity pulls it down a slope to keep the air flowing over the wings." : " Watch how speed changes lift and drag until they balance again.";
+  }
+  $("#ffTip").innerHTML = msg;
+}
+function ffBuildControls() {
+  $("#ffSliders").innerHTML = FF_SLIDERS[FF.mode].map(([k, name, lo, hi, unit = ""]) =>
+    `<label class="aero-ctl ff-ctl ff-${k}">${name} <span id="ffV${k}">${FF[k]}${unit}</span><input type="range" data-k="${k}" min="${lo}" max="${hi}" value="${FF[k]}"></label>`).join("");
+  $("#ffPresets").innerHTML = FF_PRESETS[FF.mode].map(([n], i) => `<button type="button" class="chip" data-i="${i}">${n}</button>`).join("");
+  $("#ffModeHint").textContent = FF.mode === "real"
+    ? "Like a real aircraft: you set the throttle, angle of attack and load. Lift and drag change with airspeed."
+    : "Drag the four sliders. Lift and drag are set directly, so you can explore each force on its own.";
+  $$("#ffMode button").forEach((b) => b.classList.toggle("active", b.dataset.mode === FF.mode));
+}
+function ffSyncSliders() {
+  FF_SLIDERS[FF.mode].forEach(([k, , , , unit = ""]) => { const i = $(`#ffSliders input[data-k="${k}"]`); i.value = FF[k]; $("#ffV" + k).textContent = FF[k] + unit; });
+}
+function ffReset() {
+  Object.assign(FF, FF.mode === "real" ? { thr: 52, aoa: 4, W: 60 } : { L: 60, W: 60, T: 30, D: 30 }, { spd: 100, alt: 3000, vs: 0 });
+  ffForces(); ffSyncSliders(); ffRender();
+}
+function initForces() {
+  ffBuildScene(); ffBuildControls(); ffForces(); ffRender();
+  $("#ffSliders").addEventListener("input", (e) => {
+    const k = e.target.dataset.k; if (!k) return;
+    FF[k] = +e.target.value; ffSyncSliders(); ffForces(); ffRender(); labAward("forces", "Four forces experiment");
+  });
+  $("#ffMode").addEventListener("click", (e) => { const b = e.target.closest("button[data-mode]"); if (!b || b.dataset.mode === FF.mode) return; FF.mode = b.dataset.mode; ffBuildControls(); ffReset(); });
+  $("#ffPresets").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-i]"); if (!b) return;
+    const [, set, state] = FF_PRESETS[FF.mode][+b.dataset.i];
+    // each scenario starts in the air unless it says otherwise
+    Object.assign(FF, { spd: 100, alt: 3000, vs: 0 }, set, state || {}); ffForces(); ffSyncSliders(); ffRender(); labAward("forces", "Four forces experiment");
+  });
+  $("#ffReset").onclick = ffReset;
+}
+
+// ---------- Aerodynamics Lab ----------
+// Real 2D potential flow around a Joukowski airfoil (a circle mapped to a wing shape), with the Kutta condition
+// setting the circulation. Beyond the stall angle a turbulent wake is faked on the upper surface.
+const AIRFOILS = [
+  { key: "camber", name: "Cambered", t: 0.1, m: 0.08, stall: 15, d: "Curved on top, flatter underneath. Makes lift even at 0°. The everyday wing of light aircraft and trainers." },
+  { key: "sym", name: "Symmetric", t: 0.1, m: 0, stall: 15, d: "Same shape top and bottom. No lift at 0°, and it flies just as well upside down, so aerobatic aircraft and tail fins use it." },
+  { key: "thin", name: "Thin (high-speed)", t: 0.03, m: 0.02, stall: 10, d: "Thin and nearly flat. Low drag at high speed, but the sharp nose stalls early. Found on fast jets and fighters." },
+  { key: "flaps", name: "High-lift (flaps down)", t: 0.12, m: 0.17, stall: 12, d: "Lots of camber, like a wing with its flaps lowered. Huge lift at low speed for takeoff and landing, but stalls sooner and adds drag." },
+];
+const AE = { aoa: 5, spd: 100, foil: AIRFOILS[0], parts: [], stalled: false, ctx: null, w: 760, h: 380, k: 88, ox: 330, oy: 190 };
+// tiny complex-number helpers: [re, im]
+const cx_ = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1]], sub: (a, b) => [a[0] - b[0], a[1] - b[1]],
+  mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
+  div: (a, b) => { const d = b[0] * b[0] + b[1] * b[1] || 1e-12; return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; },
+  sqrt: (a) => { const r = Math.hypot(a[0], a[1]), re = Math.sqrt((r + a[0]) / 2), im = Math.sign(a[1] || 1) * Math.sqrt(Math.max(0, (r - a[0]) / 2)); return [re, im]; },
+  exp: (t) => [Math.cos(t), Math.sin(t)], abs: (a) => Math.hypot(a[0], a[1]),
+};
+function aeroGeom() {
+  const f = AE.foil, c = 1, mu = [-f.t * c, f.m * c], te = cx_.sub([c, 0], mu);
+  const a = cx_.abs(te), beta = Math.atan2(f.m, 1 + f.t);
+  const aoaR = AE.aoa * Math.PI / 180, effA = Math.min(AE.aoa, f.stall) * Math.PI / 180;
+  let gam = 4 * Math.PI * a * Math.sin(effA + beta);
+  if (AE.aoa > f.stall) gam *= Math.max(0.55, 1 - 0.06 * (AE.aoa - f.stall));
+  return { c, mu, a, beta, aoaR, gam };
+}
+function aeroCL(aoa, f = AE.foil) {
+  const a = Math.hypot(1 + f.t, f.m), beta = Math.atan2(f.m, 1 + f.t), slope = 2 * Math.PI * a / 1;
+  const clAt = (al) => slope * Math.sin(al * Math.PI / 180 + beta) / 2; // per unit chord ≈ 4c ⇒ /2 keeps realistic magnitudes
+  if (aoa <= f.stall) return clAt(aoa);
+  return clAt(f.stall) * Math.max(0.55, 1 - 0.05 * (aoa - f.stall));
+}
+// Velocity (display frame, freestream = +x, magnitude 1) at display point p.
+function aeroVel(p, G) {
+  const zeta = cx_.mul(p, cx_.exp(G.aoaR)); // to airfoil frame
+  const disc = cx_.sqrt(cx_.sub(cx_.mul(zeta, zeta), [4 * G.c * G.c, 0]));
+  let z = cx_.mul(cx_.add(zeta, disc), [0.5, 0]);
+  const z2 = cx_.mul(cx_.sub(zeta, disc), [0.5, 0]);
+  if (cx_.abs(cx_.sub(z2, G.mu)) > cx_.abs(cx_.sub(z, G.mu))) z = z2;
+  const zp = cx_.sub(z, G.mu);
+  if (cx_.abs(zp) < G.a * 1.005) return null; // inside the wing
+  const zp2 = cx_.mul(zp, zp);
+  let W = cx_.sub(cx_.exp(-G.aoaR), cx_.div(cx_.mul([G.a * G.a, 0], cx_.exp(G.aoaR)), zp2));
+  W = cx_.add(W, cx_.div([0, G.gam / (2 * Math.PI)], zp));
+  const J = cx_.sub([1, 0], cx_.div([G.c * G.c, 0], cx_.mul(z, z)));
+  if (cx_.abs(J) < 0.04) return [1, 0];
+  const w = cx_.div(W, J), V = [w[0], -w[1]];
+  const out = cx_.mul(V, cx_.exp(-G.aoaR));
+  const m = cx_.abs(out); return m > 3 ? [out[0] * 3 / m, out[1] * 3 / m] : out;
+}
+function aeroOutline(G) {
+  const pts = [];
+  for (let i = 0; i <= 120; i++) {
+    const z = cx_.add(G.mu, cx_.mul([G.a, 0], cx_.exp(i / 120 * 2 * Math.PI)));
+    const zeta = cx_.add(z, cx_.div([G.c * G.c, 0], z));
+    pts.push(cx_.mul(zeta, cx_.exp(-G.aoaR)));
+  }
+  return pts;
+}
+const aeroToScreen = (p) => [AE.ox + p[0] * AE.k, AE.oy - p[1] * AE.k];
+function aeroSpawn(pt, anywhere) {
+  pt.x = anywhere ? -4 + Math.random() * 9.3 : -4 - Math.random() * 0.4;
+  pt.y = (Math.random() * 2 - 1) * 2.4; pt.age = 0; pt.px = pt.x; pt.py = pt.y; pt.turb = 0;
+}
+function aeroStep(dt) {
+  const ctx = AE.ctx, G = AE.G, night = isNight(), U = 2.2 * AE.spd / 100;
+  ctx.fillStyle = night ? "rgba(6,12,30,0.22)" : "rgba(236,243,255,0.25)";
+  ctx.fillRect(0, 0, AE.w, AE.h);
+  const outline = AE.outline, le = AE.le, te = AE.te, stallDepth = AE.stalled ? 0.5 + (AE.aoa - AE.foil.stall) * 0.09 : 0;
+  ctx.lineWidth = 1.6; ctx.lineCap = "round";
+  for (const pt of AE.parts) {
+    let v = aeroVel([pt.x, pt.y], G);
+    if (!v) { aeroSpawn(pt); continue; }
+    let speed = Math.hypot(v[0], v[1]);
+    if (stallDepth) { // separated, swirling flow above the rear of the wing
+      const t = (pt.x - le[0]) / (te[0] - le[0]), chordY = le[1] + (te[1] - le[1]) * clamp(t, 0, 1);
+      if (t > 0.25 && pt.y > chordY - 0.05 && pt.y < chordY + stallDepth * clamp(t * 1.4, 0.3, 2.2)) {
+        pt.turb = 1;
+      } else pt.turb = Math.max(0, pt.turb - dt * 0.6);
+      if (pt.turb > 0) {
+        const j = pt.turb;
+        v = [v[0] * (1 - 0.75 * j) + (Math.random() - 0.5) * 2.4 * j, v[1] * (1 - 0.75 * j) + (Math.random() - 0.5) * 2.4 * j];
+        speed = Math.hypot(v[0], v[1]) * (1 - 0.5 * j);
+      }
+    }
+    pt.px = pt.x; pt.py = pt.y;
+    pt.x += v[0] * U * dt; pt.y += v[1] * U * dt; pt.age += dt;
+    if (pt.x > 5.4 || Math.abs(pt.y) > 2.7 || pt.age > 14) { aeroSpawn(pt); continue; }
+    const [x1, y1] = aeroToScreen([pt.px, pt.py]), [x2, y2] = aeroToScreen([pt.x, pt.y]);
+    // colour: blue (slow, high pressure) → white → pink (fast, low pressure); grey when turbulent
+    const r = clamp((speed - 0.6) / 0.9, 0, 1);
+    const hue = r < 0.5 ? 215 : 330, sat = pt.turb > 0.3 ? 8 : Math.round(Math.abs(r - 0.5) * 2 * 85 + 10);
+    const light = night ? 62 + (1 - Math.abs(r - 0.5) * 2) * 22 : 52 - Math.abs(r - 0.5) * 8;
+    ctx.strokeStyle = `hsl(${hue} ${sat}% ${light}%)`;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  // wing
+  ctx.beginPath(); outline.forEach((p, i) => { const [x, y] = aeroToScreen(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath();
+  ctx.fillStyle = night ? "#cbd5e1" : "#1e3a8a"; ctx.fill();
+  // lift arrow from the quarter-chord, perpendicular to the oncoming air
+  const qc = aeroToScreen([le[0] + (te[0] - le[0]) * 0.25, le[1] + (te[1] - le[1]) * 0.25]);
+  const len = clamp(aeroCL(AE.aoa) * (AE.spd / 100) ** 2 * 80, -90, 160);
+  if (Math.abs(len) > 4) {
+    ctx.strokeStyle = ctx.fillStyle = night ? "#f9a8d4" : "#db2777"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(qc[0], qc[1]); ctx.lineTo(qc[0], qc[1] - len); ctx.stroke();
+    const dir = Math.sign(len);
+    ctx.beginPath(); ctx.moveTo(qc[0], qc[1] - len - dir * 10); ctx.lineTo(qc[0] - 8, qc[1] - len + dir * 2); ctx.lineTo(qc[0] + 8, qc[1] - len + dir * 2); ctx.fill();
+    ctx.font = "700 13px Bahnschrift, Segoe UI, sans-serif"; ctx.fillText("LIFT", qc[0] + 12, qc[1] - len / 2);
+  }
+  // freestream label
+  ctx.fillStyle = night ? "rgba(203,213,225,.75)" : "rgba(15,31,69,.55)"; ctx.font = "600 12px Bahnschrift, Segoe UI, sans-serif";
+  ctx.fillText(`RELATIVE WIND ${AE.spd} kt  →`, 14, 22);
+}
+function aeroUpdate() {
+  AE.G = aeroGeom(); AE.outline = aeroOutline(AE.G);
+  const xs = AE.outline.map((p) => p[0]); const iL = xs.indexOf(Math.min(...xs)), iT = xs.indexOf(Math.max(...xs));
+  AE.le = AE.outline[iL]; AE.te = AE.outline[iT];
+  AE.stalled = AE.aoa > AE.foil.stall;
+  const cl = aeroCL(AE.aoa), lift = cl * (AE.spd / 100) ** 2 / aeroCL(5, AIRFOILS[0]) * 100;
+  $("#aeroAoaV").textContent = AE.aoa + "°"; $("#aeroSpdV").textContent = AE.spd + " kt";
+  $("#aeroCL").textContent = cl.toFixed(2); $("#aeroLift").textContent = Math.round(lift) + "%";
+  const st = $("#aeroState"); st.textContent = AE.stalled ? "STALLED" : AE.aoa > AE.foil.stall - 3 ? "NEAR STALL" : cl < 0 ? "NEG. LIFT" : "FLYING";
+  st.parentElement.classList.toggle("warn", AE.stalled);
+  if (AE.stalled) labAward("stall", "Discovered the stall");
+  aeroChart(); aeroTip(cl, lift);
+}
+function aeroTip(cl, lift) {
+  const f = AE.foil, a = AE.aoa;
+  let t;
+  if (AE.stalled) t = `⚠ <b>Stalled at ${a}°.</b> This wing's critical angle is about ${f.stall}°. Past it the air breaks away from the top surface into a turbulent wake (grey). Lift drops and drag soars. A stall depends on <em>angle</em>, not speed. To recover, lower the nose.`;
+  else if (a > f.stall - 3) t = `Close to the critical angle (${f.stall}°). Lift is near its maximum, but a little more and the airflow will separate. Real aircraft sound a stall-warning horn here.`;
+  else if (f.m === 0 && a === 0) t = "A symmetric wing at 0° makes <b>no lift</b>. The flow over the top and bottom is a mirror image, so the pressures cancel out.";
+  else if (cl < 0) t = `At ${a}° the wing pushes <b>down</b>. The fast, low-pressure air (pink) is now underneath.`;
+  else if (a <= 0) t = `Even at ${a}°, this ${f.name.toLowerCase()} wing still makes some lift because of its curved shape (camber).`;
+  else t = `At ${a}°, air over the top speeds up (pink, lower pressure) and air underneath slows down (blue, higher pressure). Notice the air leaving the trailing edge is turned <b>downward</b>: that's the downwash.`;
+  t += ` <br><small>Lift grows with speed squared: at ${AE.spd} kt this wing makes ${Math.round(lift)}% of the lift of a cambered wing at 5° and 100 kt. Double the speed for 4× the lift.</small>`;
+  $("#aeroTip").innerHTML = t;
+}
+function aeroChart() {
+  const X = (a) => 30 + (a + 5) / 27 * 220, Y = (cl) => 125 - cl * 55;
+  const line = (f) => Array.from({ length: 55 }, (_, i) => { const a = -5 + i * 0.5; return `${X(a).toFixed(1)},${Y(aeroCL(a, f)).toFixed(1)}`; }).join(" ");
+  const f = AE.foil, cl = aeroCL(AE.aoa);
+  $("#aeroChart").innerHTML = `<line x1="30" y1="${Y(0)}" x2="250" y2="${Y(0)}" class="ac-axis"/><line x1="${X(0)}" y1="8" x2="${X(0)}" y2="140" class="ac-axis"/>
+    <text x="250" y="${Y(0) + 12}" class="ac-lbl end">angle →</text><text x="${X(0) + 4}" y="14" class="ac-lbl">lift coeff.</text>
+    ${AIRFOILS.filter((o) => o !== f).map((o) => `<polyline points="${line(o)}" class="ac-other"/>`).join("")}
+    <line x1="${X(f.stall)}" y1="8" x2="${X(f.stall)}" y2="140" class="ac-stall"/><text x="${X(f.stall) + 3}" y="24" class="ac-lbl warn">stall ${f.stall}°</text>
+    <polyline points="${line(f)}" class="ac-line"/><circle cx="${X(AE.aoa)}" cy="${Y(cl)}" r="5" class="ac-dot"/>`;
+}
+const WINGS = [
+  { key: "rect", name: "Rectangular", path: "M-150 30 L150 30 L150 62 L-150 62 Z", ar: "≈ 7", good: "Cheap and easy to build. Gentle stall that starts near the fuselage, so the ailerons keep working.", bad: "More drag from wingtip vortices than tapered wings.", seen: "Many light trainers and homebuilt aircraft" },
+  { key: "taper", name: "Tapered", path: "M-150 38 L-20 22 L20 22 L150 38 L150 54 L20 68 L-20 68 L-150 54 Z", ar: "≈ 8–9", good: "Lighter and lower drag than rectangular. Close to the ideal lift spread.", bad: "Tips can stall first unless the wing is twisted (washout).", seen: "Most light aircraft and business jets" },
+  { key: "ellip", name: "Elliptical", path: "M-150 44 C-150 18 -60 14 0 14 C60 14 150 18 150 44 C150 60 60 72 0 72 C-60 72 -150 60 -150 44 Z", ar: "≈ 6", good: "In theory the most efficient wing: the lowest drag for the lift it makes.", bad: "Curved everywhere, so it's hard and expensive to build.", seen: "Supermarine Spitfire" },
+  { key: "swept", name: "Swept", path: "M-150 96 L-20 18 L20 18 L150 96 L150 108 L20 62 L-20 62 L-150 108 Z", ar: "≈ 9", good: "Delays shock waves near the speed of sound, so jets can cruise at around Mach 0.8.", bad: "Worse at low speed, so it needs flaps and slats for landing. Tends to stall at the tips.", seen: "Airliners such as the Boeing 737 and Airbus A320" },
+  { key: "delta", name: "Delta", path: "M0 0 L120 110 L-120 110 Z", ar: "≈ 2", good: "Very strong, lots of room for fuel, great at supersonic speed and keeps lifting to high angles.", bad: "High drag at low speed. Lands fast and nose-high.", seen: "Concorde and many fighters" },
+  { key: "glider", name: "High aspect ratio", path: "M-158 40 L-10 32 L10 32 L158 40 L158 47 L10 54 L-10 54 L-158 47 Z", ar: "≈ 20–30", good: "Long and slender, with very little induced drag, so it glides a long way for each metre it drops.", bad: "Heavy, flexible structure. Slow to roll and not built for speed.", seen: "Gliders and high-altitude aircraft" },
+];
+function renderWing(key) {
+  const w = WINGS.find((x) => x.key === key);
+  $$("#wingSeg button").forEach((b) => b.classList.toggle("active", b.dataset.k === key));
+  $("#wingSvg").innerHTML = `<path d="${w.path}" class="wing-shape"/><rect x="-9" y="-12" width="18" height="140" rx="9" class="wing-fuse"/><text x="0" y="-6" class="wing-lbl">▲ direction of flight</text>`;
+  $("#wingInfo").innerHTML = `<div class="label">${esc(w.name)}</div><p><b>Aspect ratio:</b> ${w.ar} <small>(span² ÷ wing area: long and thin = high)</small></p><p><b>👍 Good at:</b> ${w.good}</p><p><b>👎 Trade-off:</b> ${w.bad}</p><p><b>✈ Seen on:</b> ${w.seen}</p>`;
+}
+function initAero() {
+  const cv = $("#aeroCanvas"); AE.ctx = cv.getContext("2d");
+  AE.parts = Array.from({ length: 520 }, () => { const p = {}; aeroSpawn(p, true); return p; });
+  $("#aeroShapes").innerHTML = AIRFOILS.map((f) => `<button type="button" class="chip${f === AE.foil ? " active" : ""}" data-k="${f.key}" title="${esc(f.d)}">${f.name}</button>`).join("");
+  $("#aeroShapes").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-k]"); if (!b) return;
+    AE.foil = AIRFOILS.find((f) => f.key === b.dataset.k);
+    $$("#aeroShapes .chip").forEach((c) => c.classList.toggle("active", c === b));
+    aeroUpdate(); toast(AE.foil.d.split(".")[0] + ".");
+  });
+  $("#aeroAoa").addEventListener("input", (e) => { AE.aoa = +e.target.value; aeroUpdate(); });
+  $("#aeroSpd").addEventListener("input", (e) => { AE.spd = +e.target.value; aeroUpdate(); });
+  $("#wingSeg").innerHTML = WINGS.map((w) => `<button type="button" data-k="${w.key}">${w.name}</button>`).join("");
+  $("#wingSeg").addEventListener("click", (e) => { const b = e.target.closest("button[data-k]"); if (b) renderWing(b.dataset.k); });
+  renderWing("rect"); aeroUpdate();
+}
+
+// ---------- Engine Explorer ----------
+const CY = 130; // engine centre line
+const ENGINES = {
+  turbofan: {
+    name: "Turbofan", steps: ["Suck · fan & intake", "Squeeze · compressor", "Bang · combustor", "Blow · turbine & exhaust"],
+    core: [[30, 46], [90, 46], [250, 28], [320, 32], [390, 40], [540, 24], [640, 24]], hub: [[20, 0], [55, 20], [390, 14], [460, 0]],
+    temp: [[30, 0], [90, 0.05], [250, 0.4], [262, 1], [320, 1], [390, 0.6], [540, 0.45], [640, 0.35]], speed: [[30, 150], [90, 120], [250, 100], [320, 150], [390, 230], [640, 300]],
+    coreFrom: 30, casing: [90, 390], nacelle: [[25, 112], [60, 114], [360, 108], [400, 100]],
+    bypassIn: [[30, 48], [90, 54], [250, 36], [390, 48], [640, 50]], bypassOut: [[30, 104], [360, 100], [400, 92], [640, 90]],
+    fan: { x: [52, 66], r: 108 }, comp: [105, 125, 145, 165, 185, 205, 225, 242], turb: [330, 345, 360, 375], burner: [252, 318],
+    parts: {
+      fan: { name: "Fan", x: [30, 90], step: 0, d: "The giant fan at the front. In a modern airliner engine it moves about 9–12 times more air <b>around</b> the core than through it, and makes most of the thrust (around 80%)." },
+      bypass: { name: "Bypass duct", x: [90, 400], r: [50, 112], step: 3, d: "The cool air from the fan rushes through this ring-shaped duct and out the back. Moving lots of air fairly slowly is efficient and much quieter than a pure jet." },
+      comp: { name: "Compressor", x: [90, 250], r: [0, 50], step: 1, d: "Rows of spinning blades squeeze the core air to around 40 times outside pressure. Squeezed air burns far more efficiently." },
+      burner: { name: "Combustion chamber", x: [250, 320], r: [0, 50], step: 2, d: "Fuel is sprayed into the squeezed air and burns continuously at roughly 1,500 °C+. No spark plugs needed once it's running." },
+      turb: { name: "Turbine", x: [320, 390], r: [0, 50], step: 3, d: "The hot gas spins the turbine like wind on a windmill. Shafts carry that power forward to turn the compressor and the big fan." },
+      nozzle: { name: "Core exhaust", x: [390, 545], r: [0, 50], step: 3, d: "The remaining hot gas leaves through the nozzle and adds the rest of the thrust." },
+    },
+    facts: { how: "A big fan pushes most of the air around the engine core (bypass), and the hot core jet adds the rest.", speed: "Mach 0.75–0.85 (airliner cruise)", good: "Efficient and quiet at airliner speeds", bad: "Big and heavy. Inefficient at very low or supersonic speeds", seen: "Almost every airliner: Boeing 737, Airbus A320, Boeing 787", out: [120, "kN thrust"], rpm: [20, 100, "% N1"] },
+  },
+  turbojet: {
+    name: "Turbojet", steps: ["Suck · intake", "Squeeze · compressor", "Bang · combustor", "Blow · turbine & nozzle"],
+    core: [[20, 64], [90, 60], [260, 36], [340, 40], [410, 46], [590, 30], [640, 30]], hub: [[20, 0], [80, 16], [410, 16], [480, 0]],
+    temp: [[20, 0], [90, 0.05], [260, 0.38], [275, 1], [340, 1], [410, 0.7], [590, 0.55], [640, 0.5]], speed: [[20, 140], [90, 120], [260, 100], [340, 150], [410, 240], [640, 340]],
+    coreFrom: 20, casing: [20, 590], comp: [100, 122, 144, 166, 188, 210, 232, 252], turb: [355, 375, 395], burner: [262, 338],
+    parts: {
+      intake: { name: "Intake", x: [20, 90], step: 0, d: "Smoothly slows the incoming air and feeds it evenly into the compressor. On supersonic jets the intake also slows the air below the speed of sound." },
+      comp: { name: "Compressor", x: [90, 260], step: 1, d: "Stage after stage of spinning blades (and fixed vanes between them) squeeze the air before it's burned." },
+      burner: { name: "Combustion chamber", x: [260, 340], step: 2, d: "Fuel burns continuously in the squeezed air, making very hot, high-pressure gas." },
+      turb: { name: "Turbine", x: [340, 410], step: 3, d: "Takes just enough energy from the hot gas to drive the compressor through a shaft. The rest is left for thrust." },
+      nozzle: { name: "Nozzle", x: [410, 600], step: 3, d: "Accelerates the gas into a fast, hot jet. <b>All</b> the thrust comes from this jet: that's why turbojets are loud and thirsty at low speed. Some add an afterburner here." },
+    },
+    facts: { how: "All the air goes through the core and leaves as one very fast, hot jet.", speed: "Best above Mach 1 (often with an afterburner)", good: "Simple and powerful at very high speed", bad: "Very noisy and uses a lot of fuel at low speeds", seen: "Early jets, Concorde, older fighters and missiles", out: [60, "kN thrust"], rpm: [55, 100, "% RPM"] },
+  },
+  turboprop: {
+    name: "Turboprop", steps: ["Suck · intake", "Squeeze · compressor", "Bang · combustor", "Blow · turbine → propeller"],
+    core: [[110, 40], [150, 40], [280, 24], [340, 28], [420, 36], [500, 36], [640, 36]], hub: [[60, 0], [70, 22], [110, 22], [420, 12], [440, 0]],
+    temp: [[110, 0], [280, 0.35], [292, 1], [340, 1], [420, 0.55], [640, 0.4]], speed: [[110, 110], [280, 95], [340, 140], [420, 180], [640, 200]],
+    coreFrom: 110, casing: [110, 500], nacelleBody: [[50, 26], [110, 50], [420, 50], [500, 42]], prop: { x: 42, r: 112 }, gears: true, wash: true,
+    comp: [160, 178, 196, 214, 232, 250, 268], turb: [350, 368, 386, 404], burner: [282, 338],
+    parts: {
+      prop: { name: "Propeller", lbl: "Prop", x: [20, 60], step: 3, d: "Makes about 90% of the thrust by pushing a large mass of air backwards. Its blades can twist (change pitch) to suit the speed." },
+      gear: { name: "Reduction gearbox", lbl: "Gearbox", x: [60, 110], step: 3, d: "The turbine spins very fast (tens of thousands of RPM) but a propeller can't, or its tips would go supersonic. The gearbox slows it down to around 1,000–2,000 RPM." },
+      comp: { name: "Compressor", x: [110, 280], step: 1, d: "Squeezes the air before burning, just like in a jet." },
+      burner: { name: "Combustion chamber", x: [280, 340], step: 2, d: "Fuel burns continuously in the compressed air." },
+      turb: { name: "Turbines", x: [340, 420], step: 3, d: "Extract almost all the energy from the gas. One turbine runs the compressor, and a <b>power turbine</b> turns the propeller through a long shaft." },
+      nozzle: { name: "Exhaust", x: [420, 510], step: 3, d: "Only a little thrust comes from the exhaust. Most of the gas's energy was already taken by the turbines to spin the propeller." },
+    },
+    facts: { how: "A gas turbine spins a propeller through a gearbox. The propeller makes about 90% of the thrust.", speed: "250–350 kt", good: "The most fuel-efficient choice for short regional flights. Good on short runways", bad: "Slower than jets, and the propeller limits top speed", seen: "Regional airliners like the ATR 72 and Dash 8, King Air, C-130", out: [2000, "shp"], rpm: [70, 100, "% prop RPM"] },
+  },
+  piston: {
+    name: "Piston", steps: ["Intake", "Compression", "Power", "Exhaust"], piston: true,
+    parts: {
+      prop: { name: "Propeller", box: [40, 140, 140, 260], d: "Bolted straight onto the crankshaft, so it turns at engine speed (about 2,000–2,700 RPM in cruise) and pulls the aircraft forward." },
+      intake: { name: "Intake valve", box: [285, 10, 372, 62], step: 0, d: "Opens on the <b>intake</b> stroke to let the fuel–air mixture in as the piston moves down." },
+      exhaust: { name: "Exhaust valve", box: [390, 10, 482, 62], step: 3, d: "Opens on the <b>exhaust</b> stroke so the rising piston can push the burnt gas out." },
+      spark: { name: "Spark plugs", box: [372, 0, 390, 46], step: 2, d: "Fire just before the top of the compression stroke to ignite the mixture. Aircraft engines have <b>two</b> per cylinder, each powered by its own magneto, for safety." },
+      cyl: { name: "Cylinder", box: [330, 46, 346, 178], d: "The tube the piston slides in. Light aircraft usually have 4 or 6 cylinders, laid out flat and cooled by air." },
+      piston: { name: "Piston", box: [346, 62, 414, 175], step: 2, d: "Squeezes the mixture, then gets shoved down hard when it burns. This is the <b>power</b> stroke." },
+      crank: { name: "Crankshaft & connecting rod", box: [346, 175, 414, 250], step: 2, d: "The connecting rod turns the piston's up-and-down motion into rotation, just like your legs turning bicycle pedals." },
+    },
+    facts: { how: "Pistons and a crankshaft (like a car engine) turn a propeller directly.", speed: "Up to about 200 kt", good: "Cheap, simple and efficient at low speed and low altitude", bad: "Loses power as the air thins at altitude. Limited speed and power", seen: "Training and light aircraft: Cessna 172, Piper Cherokee, Diamond DA40", out: [180, "hp"], rpm: [700, 2700, " RPM"] },
+  },
+};
+const ENG_ORDER = ["turbofan", "turboprop", "piston", "turbojet"];
+const EN = { key: "turbofan", thr: 0.6, phase: 0, theta: 0, parts: [], part: null, seen: new Set() };
+// cool air = blue, squeezed air = paler, burning/hot gas = orange → red
+const engTempColor = (t) => t < 0.4 ? `hsl(210 ${Math.round(80 - t / 0.4 * 55)}% ${Math.round(60 + t / 0.4 * 18)}%)` : `hsl(${Math.round(40 - (t - 0.4) / 0.6 * 35)} 95% 56%)`;
+function engBuild() {
+  const e = ENGINES[EN.key], svg = $("#engSvg");
+  let h = "";
+  const band = (pts, from, to, off, cls) => {
+    const xs = []; for (let x = from; x <= to; x += 5) xs.push(x);
+    const top = xs.map((x) => `${x},${CY - pw(pts, x) - off}`).concat(xs.slice().reverse().map((x) => `${x},${CY - pw(pts, x)}`));
+    const bot = xs.map((x) => `${x},${CY + pw(pts, x) + off}`).concat(xs.slice().reverse().map((x) => `${x},${CY + pw(pts, x)}`));
+    return `<polygon points="${top.join(" ")}" class="${cls}"/><polygon points="${bot.join(" ")}" class="${cls}"/>`;
+  };
+  if (e.piston) {
+    h = `<line x1="95" y1="210" x2="380" y2="210" class="eng-shaft"/>
+      <rect x="282" y="26" width="72" height="12" class="eng-pipe in"/><rect x="406" y="26" width="76" height="12" class="eng-pipe out"/>
+      <text x="286" y="20" class="eng-small">fuel + air in</text><text x="420" y="20" class="eng-small">exhaust out</text>
+      <rect x="334" y="22" width="92" height="28" rx="3" class="eng-casing"/>
+      <rect x="376" y="0" width="8" height="34" rx="2" class="eng-plug"/><circle id="engSpark" cx="380" cy="54" r="9" class="eng-spark"/>
+      <rect x="330" y="50" width="14" height="128" class="eng-casing"/><rect x="416" y="50" width="14" height="128" class="eng-casing"/>
+      <rect id="engGas" x="344" y="50" width="72" height="40" class="eng-gas"/>
+      <g id="engValveI"><line x1="360" y1="14" x2="360" y2="50" class="eng-stem"/><rect x="350" y="47" width="20" height="5" rx="2" class="eng-valve"/></g>
+      <g id="engValveE"><line x1="400" y1="14" x2="400" y2="50" class="eng-stem"/><rect x="390" y="47" width="20" height="5" rx="2" class="eng-valve"/></g>
+      <rect id="engPiston" x="346" y="96" width="68" height="28" rx="3" class="eng-piston"/>
+      <circle cx="380" cy="210" r="36" class="eng-crankcase"/>
+      <line id="engRod" class="eng-rod"/><line id="engArm" class="eng-arm"/><circle id="engPin" r="5" class="eng-hub"/><circle cx="380" cy="210" r="7" class="eng-hub"/>
+      <g id="engPropG"></g>
+      <text x="462" y="104" class="eng-stroke" id="engStroke">INTAKE</text><text x="462" y="126" class="eng-small" id="engStrokeD1"></text><text x="462" y="140" class="eng-small" id="engStrokeD2"></text>`;
+  } else {
+    if (e.nacelle) h += band(e.nacelle, 25, 400, 10, "eng-nacelle");
+    if (e.wash) h += `<g id="engWash"></g>`;
+    h += `<g id="engBypass"></g>`;
+    if (e.nacelleBody) h += band(e.nacelleBody, 50, 500, 0, "eng-nacelle");
+    h += band(e.core, e.casing[0], e.casing[1], 8, "eng-casing");
+    // hub / spool
+    const hx = []; for (let x = e.hub[0][0]; x <= e.hub[e.hub.length - 1][0]; x += 5) hx.push(x);
+    h += `<polygon points="${hx.map((x) => `${x},${CY - pw(e.hub, x)}`).concat(hx.slice().reverse().map((x) => `${x},${CY + pw(e.hub, x)}`)).join(" ")}" class="eng-hubbody"/>`;
+    h += `<g id="engFlame">${[0, 1, 2].map((i) => `<ellipse cx="${(e.burner[0] + e.burner[1]) / 2}" cy="${CY + (i - 1) * 0}" rx="${(e.burner[1] - e.burner[0]) / 2 - 4}" ry="${pw(e.core, e.burner[0]) - 6 - i * 7}" class="eng-flame f${i}"/>`).join("")}</g>`;
+    h += `<g id="engCore"></g>`;
+    const stage = (x, r0, r1, cls) => `<line x1="${x}" y1="${CY - r0}" x2="${x}" y2="${CY - r1}" class="${cls}"/><line x1="${x}" y1="${CY + r0}" x2="${x}" y2="${CY + r1}" class="${cls}"/>`;
+    h += `<g id="engBlades">${e.comp.map((x) => stage(x, pw(e.hub, x) + 1, pw(e.core, x) - 1, "eng-blade comp")).join("")}${e.turb.map((x) => stage(x, pw(e.hub, x) + 1, pw(e.core, x) - 1, "eng-blade turb")).join("")}
+      ${e.fan ? e.fan.x.map((x) => stage(x, pw(e.hub, x) + 1, e.fan.r - 4, "eng-blade fan")).join("") : ""}</g>`;
+    if (e.gears) h += `<circle cx="86" cy="${CY - 11}" r="10" class="eng-gear"/><circle cx="86" cy="${CY + 11}" r="10" class="eng-gear b"/>`;
+    if (e.prop) h += `<g id="engPropG"></g>`;
+  }
+  // hit areas
+  h += Object.entries(e.parts).map(([k, p]) => {
+    if (p.box) { const [x0, y0, x1, y1] = p.box; return `<rect class="eng-hit" data-part="${k}" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"><title>${p.name}</title></rect>`; }
+    const [r0, r1] = p.r || [0, 118];
+    return r0 === 0 ? `<rect class="eng-hit" data-part="${k}" x="${p.x[0]}" y="${CY - r1}" width="${p.x[1] - p.x[0]}" height="${2 * r1}"><title>${p.name}</title></rect>`
+      : `<rect class="eng-hit" data-part="${k}" x="${p.x[0]}" y="${CY - r1}" width="${p.x[1] - p.x[0]}" height="${r1 - r0}"><title>${p.name}</title></rect><rect class="eng-hit" data-part="${k}" x="${p.x[0]}" y="${CY + r0}" width="${p.x[1] - p.x[0]}" height="${r1 - r0}"><title>${p.name}</title></rect>`;
+  }).join("");
+  if (!e.piston) h += Object.entries(e.parts).map(([k, p]) => `<text x="${p.r ? 150 : (p.x[0] + p.x[1]) / 2}" y="${p.r ? CY - 74 : 274}" class="eng-lbl" data-part="${k}">${p.lbl || p.name.replace(/ (chamber|duct)$/i, "")}</text>`).join("");
+  svg.innerHTML = h;
+  // particles
+  EN.parts = [];
+  const add = (kind, n, g) => { for (let i = 0; i < n; i++) { const c = document.createElementNS(SVGNS, "circle"); c.setAttribute("r", kind === "core" ? 2.4 : 2.2); c.setAttribute("class", "eng-pt " + kind); g.appendChild(c); EN.parts.push({ kind, el: c, x: Math.random() * 640, yn: Math.random() * 2 - 1 }); } };
+  if (!e.piston) {
+    add("core", 90, $("#engCore"));
+    if (e.bypassIn) add("bypass", 80, $("#engBypass"));
+    if (e.wash) add("wash", 70, $("#engWash"));
+  }
+  $("#engSteps").innerHTML = e.steps.map((s, i) => `<span data-i="${i}">${i + 1}. ${s}</span>`).join("");
+  const f = e.facts;
+  $("#engFacts").innerHTML = `<div class="readouts eng-readouts"><div class="readout"><small>${f.rpm[2].includes("%") ? f.rpm[2].replace("% ", "").toUpperCase() + " %" : "ENGINE RPM"}</small><b id="engRpm">0</b></div><div class="readout"><small>OUTPUT</small><b id="engOut" class="pink">0</b></div></div>
+    <p><b>How it makes thrust:</b> ${f.how}</p><p><b>Best speed:</b> ${f.speed}</p><p><b>👍</b> ${f.good}</p><p><b>👎</b> ${f.bad}</p><p><b>✈ Found on:</b> ${f.seen}</p>`;
+  engSelectPart(null);
+  engReadouts();
+  $$("#engSeg button").forEach((b) => b.classList.toggle("active", b.dataset.k === EN.key));
+  EN.seen.add(EN.key);
+  if (EN.seen.size === ENG_ORDER.length) labAward("engines", "Explored every engine");
+}
+function engSelectPart(k) {
+  const e = ENGINES[EN.key], p = k && e.parts[k];
+  EN.part = k;
+  $$("#engSvg .eng-hit").forEach((r) => r.classList.toggle("sel", r.dataset.part === k));
+  $$("#engSvg .eng-lbl").forEach((r) => r.classList.toggle("sel", r.dataset.part === k));
+  $("#engPart").innerHTML = p ? `<div class="label">${esc(p.name)}</div><p>${p.d}</p>` : `<div class="label">${esc(e.name)} engine</div><p class="sub">👆 Click a part of the engine to see what it does.</p>`;
+  if (!e.piston) $$("#engSteps span").forEach((s) => s.classList.toggle("on", !!p && +s.dataset.i === p.step));
+}
+function engReadouts() {
+  const f = ENGINES[EN.key].facts, t = EN.thr;
+  const rpm = f.rpm[0] + (f.rpm[1] - f.rpm[0]) * t, out = f.out[0] * (0.05 + 0.95 * t ** 1.6);
+  $("#engRpm").textContent = Math.round(rpm).toLocaleString("en-US");
+  $("#engOut").textContent = (out >= 100 ? Math.round(out).toLocaleString("en-US") : out.toFixed(1)) + " " + f.out[1];
+}
+function engDrawProp(cx, cy, r, ang, spin) {
+  const g = $("#engPropG"); if (!g) return;
+  const c1 = Math.cos(ang), c2 = Math.cos(ang + Math.PI);
+  const blur = clamp((spin - 4) / 20, 0, 0.55);
+  g.innerHTML = `<ellipse cx="${cx}" cy="${cy}" rx="7" ry="${r}" class="eng-disc" style="opacity:${blur}"/>
+    <line x1="${cx}" y1="${cy}" x2="${cx + Math.sin(ang) * 4}" y2="${cy - c1 * r}" class="eng-blade-prop" style="opacity:${1 - blur * 1.3}"/>
+    <line x1="${cx}" y1="${cy}" x2="${cx + Math.sin(ang + Math.PI) * 4}" y2="${cy - c2 * r}" class="eng-blade-prop" style="opacity:${1 - blur * 1.3}"/>
+    <path d="M${cx - 2} ${cy - 13} Q${cx - 26} ${cy} ${cx - 2} ${cy + 13} Z" class="eng-spinner"/>`;
+}
+function engStep(dt) {
+  const e = ENGINES[EN.key], t = EN.thr, idle = 0.12 + 0.88 * t;
+  if (e.piston) {
+    const revPerSec = 0.25 + 1.6 * t; // slowed down so you can follow the strokes
+    EN.theta = (EN.theta + 360 * revPerSec * dt) % 720;
+    const th = EN.theta * Math.PI / 180, cx = 380, cy = 210, r = 24, L = 76;
+    const pinY = cy - (r * Math.cos(th) + Math.sqrt(L * L - (r * Math.sin(th)) ** 2)), top = pinY - 14;
+    const crankX = cx + r * Math.sin(th), crankY = cy - r * Math.cos(th);
+    $("#engPiston").setAttribute("y", top);
+    $("#engGas").setAttribute("height", Math.max(0, top - 50));
+    const rod = $("#engRod"); rod.setAttribute("x1", cx); rod.setAttribute("y1", pinY); rod.setAttribute("x2", crankX); rod.setAttribute("y2", crankY);
+    const arm = $("#engArm"); arm.setAttribute("x1", cx); arm.setAttribute("y1", cy); arm.setAttribute("x2", crankX); arm.setAttribute("y2", crankY);
+    $("#engPin").setAttribute("cx", crankX); $("#engPin").setAttribute("cy", crankY);
+    const ph = EN.theta, stroke = Math.floor(ph / 180);
+    const openI = ph < 190 ? Math.sin(Math.min(ph, 180) / 180 * Math.PI) : 0, openE = ph > 530 ? Math.sin((Math.min(ph, 710) - 530) / 180 * Math.PI) : 0;
+    $("#engValveI").setAttribute("transform", `translate(0 ${openI * 8})`);
+    $("#engValveE").setAttribute("transform", `translate(0 ${openE * 8})`);
+    $("#engSpark").style.opacity = ph > 350 && ph < 378 ? 1 : 0;
+    const gas = $("#engGas"), k = (ph % 180) / 180;
+    gas.style.fill = ["hsl(205 80% 70%)", `hsl(215 80% ${66 - k * 14}%)`, `hsl(${40 - k * 35} 95% ${58 - k * 12}%)`, `hsl(220 8% ${55 + k * 10}%)`][stroke];
+    gas.style.opacity = [0.55, 0.75, 0.9, 0.55][stroke];
+    $(".eng-pipe.in").classList.toggle("flow", stroke === 0); $(".eng-pipe.out").classList.toggle("flow", stroke === 3);
+    const names = ["INTAKE", "COMPRESSION", "POWER", "EXHAUST"], what = [["Piston moves down,", "sucking in fuel and air"], ["Valves shut and the piston", "squeezes the mixture"], ["The spark fires and burning", "gas shoves the piston down"], ["The piston rises and", "pushes burnt gas out"]];
+    $("#engStroke").textContent = `${stroke + 1}. ${names[stroke]}`; $("#engStrokeD1").textContent = what[stroke][0]; $("#engStrokeD2").textContent = what[stroke][1];
+    $$("#engSteps span").forEach((s) => s.classList.toggle("on", +s.dataset.i === stroke));
+    engDrawProp(90, 210, 46, th, revPerSec * 2);
+    return;
+  }
+  EN.phase += dt * (6 + 70 * t);
+  $$("#engBlades .eng-blade").forEach((b) => (b.style.strokeDashoffset = -EN.phase * (b.classList.contains("fan") ? 0.6 : 1)));
+  const fl = $("#engFlame"); fl.style.opacity = 0.25 + 0.75 * t * (0.85 + Math.random() * 0.15);
+  if (e.prop) engDrawProp(e.prop.x, CY, e.prop.r, EN.phase * 0.05, 2 + t * 30);
+  for (const p of EN.parts) {
+    let v, inner, outer, temp;
+    if (p.kind === "core") { v = pw(e.speed, p.x); temp = pw(e.temp, p.x); inner = pw(e.hub, p.x); outer = pw(e.core, p.x); }
+    else if (p.kind === "bypass") { v = 210; temp = 0.03; inner = pw(e.bypassIn, p.x); outer = pw(e.bypassOut, p.x); }
+    else { v = 230; temp = 0.02; inner = 54; outer = 114; } // propeller wash
+    p.x += v * idle * dt;
+    const start = p.kind === "core" ? e.coreFrom : p.kind === "bypass" ? 30 : 0;
+    if (p.x > 640) { p.x = start - Math.random() * 30; p.yn = Math.random() * 2 - 1; }
+    const y = CY + Math.sign(p.yn || 1) * (inner + 2 + Math.abs(p.yn) * Math.max(0, outer - inner - 4));
+    p.el.setAttribute("cx", p.x.toFixed(1)); p.el.setAttribute("cy", y.toFixed(1));
+    p.el.style.fill = engTempColor(temp); p.el.style.opacity = p.x < start ? 0 : 0.9;
+  }
+}
+function initEngines() {
+  $("#engSeg").innerHTML = ENG_ORDER.map((k) => `<button type="button" data-k="${k}">${ENGINES[k].name}</button>`).join("");
+  $("#engSeg").addEventListener("click", (e) => { const b = e.target.closest("button[data-k]"); if (b) { EN.key = b.dataset.k; EN.theta = 0; engBuild(); } });
+  $("#engSvg").addEventListener("click", (e) => { const h = e.target.closest("[data-part]"); engSelectPart(h ? h.dataset.part : null); });
+  $("#engThr").addEventListener("input", (e) => { EN.thr = e.target.value / 100; $("#engThrV").textContent = e.target.value + "%"; engReadouts(); });
+  const rows = [["How it makes thrust", "how"], ["Best speed", "speed"], ["Strength", "good"], ["Weakness", "bad"], ["Found on", "seen"]];
+  $("#engTable").innerHTML = `<tr><th></th>${ENG_ORDER.map((k) => `<th>${ENGINES[k].name}</th>`).join("")}</tr>` +
+    rows.map(([lbl, key]) => `<tr><td><b>${lbl}</b></td>${ENG_ORDER.map((k) => `<td>${ENGINES[k].facts[key]}</td>`).join("")}</tr>`).join("");
+  engBuild();
+}
+
+// ---------- One animation loop for every Lab experiment (only animates what's on screen) ----------
+let labLast = 0;
+function labTick(t) {
+  const dt = Math.min((t - (labLast || t)) / 1000, 0.05); labLast = t;
+  if ($("#page-lab").classList.contains("active")) {
+    if ($("#tool-forces").offsetParent) ffStep(dt);
+    if ($("#tool-aero").offsetParent) aeroStep(dt);
+    if ($("#tool-engines").offsetParent) engStep(dt);
+  }
+  requestAnimationFrame(labTick);
+}
+initForces(); initAero(); initEngines();
+requestAnimationFrame(labTick);
