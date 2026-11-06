@@ -618,10 +618,10 @@ const REG_PREFIXES = [
   ["PH", "Netherlands", "PH-ZXY"], ["JA", "Japan", "JA451Z"], ["HB", "Switzerland", "HB-ZXY"], ["I", "Italy", "I-ZXYZ"],
 ];
 const FICT_AIRLINES = [
-  { name: "AeroLearn Airways", tel: "AEROLEARN", code: "ALW" },
-  { name: "Cloudhopper Express", tel: "CLOUDHOP", code: "CHX" },
-  { name: "Northland Cargo", tel: "NORTHFREIGHT", code: "NLC" },
-  { name: "Harbour Island Air", tel: "HARBOURBIRD", code: "HIA" },
+  { name: "AeroLearn Airways", tel: "AEROLEARN", w: "AeroLearn", code: "ALW" },
+  { name: "Cloudhopper Express", tel: "CLOUDHOP", w: "Cloudhop", code: "CHX" },
+  { name: "Northland Cargo", tel: "NORTHFREIGHT", w: "Northfreight", code: "NLC" },
+  { name: "Harbour Island Air", tel: "HARBOURBIRD", w: "Harbourbird", code: "HIA" },
 ];
 const FICT_AIRPORTS = ["Westbrook", "Harbourton", "AeroLearn Field", "Pinecrest", "Northland"];
 const FACILITY_UNITS = [

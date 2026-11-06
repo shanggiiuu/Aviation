@@ -880,8 +880,7 @@ function currentCallsign() { // { written, spoken }
   }
   const a = FICT_AIRLINES[+$("#csAirline").value], f = $("#csFlight").value.trim(), suf = $("#csSuffix").value;
   if (!/^\d{1,4}$/.test(f)) return null;
-  const tc = a.tel.charAt(0) + a.tel.slice(1).toLowerCase();
-  return { written: `${tc} ${f}${suf ? " " + suf.charAt(0) + suf.slice(1).toLowerCase() : ""}`, spoken: `${a.tel} ${spellPhonetic(f)}${suf ? " " + suf : ""}` };
+  return { written: `${a.w} ${f}${suf ? " " + suf.charAt(0) + suf.slice(1).toLowerCase() : ""}`, spoken: `${a.tel} ${spellPhonetic(f)}${suf ? " " + suf : ""}` };
 }
 function renderCallsign() {
   const out = $("#csOut");

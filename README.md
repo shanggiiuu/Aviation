@@ -10,6 +10,7 @@ A beginner-friendly aviation learning platform with an interactive glossary, les
 |---|---|
 | **Academy** | Learn about aircraft, aerodynamics, navigation, and aviation (lessons + METAR decoder, pitch/roll/yaw demo, unit converter) |
 | **ATC & Communications** | Understand pilots, control towers, VHF, and radio communication (lessons, radio practice, phonetic alphabet, radio spectrum, squawk codes) |
+| **Communication explorer** | Radio phraseology library (with quiz), call sign explorer, communication breakdown scenarios and tower light signals, frequency explorer with a VHF range calculator, and a stage-by-stage communication timeline of a fictional flight. All callsigns, airports and frequencies are fictional, labelled educational examples, and nothing is transmitted |
 | **Interactive ATC simulator** | Fly a training circuit and talk to Ground and Tower — tune the radio, read back clearances, choose or type your calls |
 | **Aviation Dictionary** | Search 140 terms like VHF, PMR, ILS, IFR, and transponder; save favourites and add your own |
 | **Aircraft Library** | Explore and compare 16 aircraft |
