@@ -25,7 +25,7 @@
     <a href="#dictionary" data-page="dictionary">Dictionary</a>
     <a href="#aircraft" data-page="aircraft">Aircraft</a>
     <a href="#careers" data-page="careers">Careers</a>
-    <a href="#quiz" data-page="quiz">Knowledge Check</a>
+    <a href="#quiz" data-page="quiz">Missions</a>
     <a href="#community" data-page="community">Community</a>
   </nav>
   <div class="hdg-tape" aria-hidden="true"><div class="hdg-track" id="hdgTrack"></div><div class="hdg-mark"></div><div class="hdg-read" id="hdgRead">000</div></div>
@@ -101,7 +101,7 @@
     <a class="card link" href="#lab"><div class="card-ico">🧪</div><h3>Aviation Lab</h3><p>Experiment with the four forces, airflow over a wing, aircraft engines, and cockpit instruments.</p><span class="go">Start experimenting →</span></a>
     <a class="card link" href="#atc"><div class="card-ico">🎧</div><h3>ATC &amp; Communications</h3><p>Understand pilots, control towers, VHF, and radio communication.</p><span class="go">Tune in →</span></a>
     <a class="card link" href="#dictionary"><div class="card-ico">📖</div><h3>Aviation Dictionary</h3><p>Search words like VHF, PMR, ILS, IFR, and transponder — <span id="termCount">140</span> terms.</p><span class="go">Look up a word →</span></a>
-    <a class="card link" href="#quiz"><div class="card-ico">🏆</div><h3>Knowledge Check</h3><p>Take aviation quizzes and review with flashcards.</p><span class="go">Test yourself →</span></a>
+    <a class="card link" href="#quiz"><div class="card-ico">🚀</div><h3>Missions</h3><p>Six missions, from First Flight to Emergency Awareness. Earn stars, XP and achievements.</p><span class="go">Start a mission →</span></a>
     <a class="card link" href="#community"><div class="card-ico">💬</div><h3>Community</h3><p>Ask questions and discuss aviation.</p><span class="go">Join the discussion →</span></a>
     <a class="card link" href="#aircraft"><div class="card-ico">🛩</div><h3>Aircraft Library</h3><p>Explore different aircraft and their characteristics.</p><span class="go">Explore aircraft →</span></a>
     <a class="card link" href="#careers"><div class="card-ico">🧭</div><h3>Aviation Careers</h3><p>Meet the pilots, engineers, controllers and planners behind every flight, and take the Career Match Quiz.</p><span class="go">Find your path →</span></a>
@@ -181,6 +181,7 @@
   <h2>Academy</h2>
   <p class="sub">Learn about aircraft, aerodynamics, navigation, and aviation. Open a lesson, answer the quick check, and mark it complete to earn XP. Underlined words open the dictionary.</p>
   <div class="progress-wrap"><span class="pw-label">Academy progress</span><div class="progress"><div class="bar" id="academyBar"></div></div><span id="academyPct">0%</span></div>
+  <div class="card bm-list"></div>
   <div id="academyLessons"></div>
   <h2 class="mt">Academy tools</h2>
   <div class="tool-group" data-tools="metar,axes,convert"></div>
@@ -267,6 +268,7 @@
   </div>
 
   <div class="progress-wrap mt"><span class="pw-label">Comms progress</span><div class="progress"><div class="bar" id="atcBar"></div></div><span id="atcPct">0%</span></div>
+  <div class="card bm-list"></div>
   <div id="atcLessons"></div>
 
   <div class="card radio-sim mt">
@@ -310,7 +312,7 @@
   <div class="chips filters" id="acFilters"></div>
   <div id="acList" class="ac-list"></div>
 
-  <div class="card mt">
+  <div class="card mt" id="acCompareCard">
     <div class="label">Compare two aircraft</div>
     <div class="row"><select id="acA"></select><span class="vs">VS</span><select id="acB"></select></div>
     <div id="acCompare" class="ac-compare"></div>
@@ -741,13 +743,21 @@
 
 <!-- ================= KNOWLEDGE CHECK ================= -->
 <section id="page-quiz" class="page">
-  <h2>Knowledge Check</h2>
-  <p class="sub">Take aviation quizzes — every round mixes dictionary, radio, and aircraft questions. Review with flashcards.</p>
+  <h2>Missions</h2>
+  <p class="sub">Don't just take quizzes — fly missions. Read the briefing, complete the tasks, and earn stars, XP and achievements. Want quick practice instead? Try a free quiz or flashcards.</p>
   <div class="tool-tabs" id="quizTabs">
-    <button data-q="quiz" class="active">🏆 Quiz</button>
+    <button data-q="missions" class="active">🚀 Missions</button>
+    <button data-q="quiz">🏆 Free quiz</button>
     <button data-q="flash">🃏 Flashcards</button>
   </div>
-  <div id="q-quiz" class="card quiz">
+  <div id="q-missions">
+    <div id="msBoardWrap">
+      <div class="card ms-progress" id="msProgress"></div>
+      <div class="ms-board" id="msBoard"></div>
+    </div>
+    <div class="card ms-run hidden" id="msRun"></div>
+  </div>
+  <div id="q-quiz" class="card quiz hidden">
     <div class="quiz-head"><span id="qProgress"></span><span>Score: <b id="qScore">0</b> · Streak: <b id="qStreak">0</b> · Best: <b id="qBest">0</b></span></div>
     <div id="qBody"></div>
   </div>
@@ -803,5 +813,6 @@
 <script src="data.js"></script>
 <script src="app.js"></script>
 <script src="careers.js"></script>
+<script src="missions.js"></script>
 </body>
 </html>

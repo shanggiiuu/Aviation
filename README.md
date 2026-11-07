@@ -17,7 +17,7 @@ A beginner-friendly aviation learning platform with an interactive glossary, les
 | **Aircraft explorer** | Click aircraft parts to learn their names and functions, plus a "find the part" game |
 | **Aviation dashboard** | Zulu clock, term of the day, airport information, aircraft profiles, and weather education |
 | **Aviation Careers** | Explore 8 careers (commercial pilot, aerospace & avionics engineer, ATC controller, aviation software engineer, aircraft mechanic, flight dispatcher, airport operations manager) — a day in the job, skills, typical path, and related AeroLearn tools — plus a Career Match Quiz |
-| **Knowledge Check** | Quizzes and flashcards |
+| **Missions** | Six missions (001 First Flight, 002 Tower Communication, 003 Aircraft Detective, 004 Weather Watch, 005 Navigation Challenge, 006 Emergency Awareness), each with a briefing, tasks and a debrief. Earn 1–3 stars, XP per new star, and achievements shown on your profile. A free quiz and flashcards remain for quick practice |
 | **Community** | Ask questions and discuss aviation |
 | **Learning accounts** | Profiles with XP, ranks, badges, saved vocabulary, progress, and export/import |
 

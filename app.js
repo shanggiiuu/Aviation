@@ -9,7 +9,7 @@ const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { co
 // Global keys are shared by everyone on this device; all other keys belong to the active profile.
 // The built-in "guest" profile uses the original un-prefixed keys, so earlier progress is kept.
 const GLOBAL_KEYS = ["posts", "profiles", "current"];
-const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone", "airportMap", "careersSeen", "careerMatch"];
+const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone", "airportMap", "careersSeen", "careerMatch", "missions", "bookmarks"];
 const rawGet = (key, def) => { try { const v = localStorage.getItem(key); return v === null ? def : JSON.parse(v); } catch { return def; } };
 const rawSet = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 let CURRENT = rawGet("sky_current", "guest");
@@ -62,21 +62,22 @@ document.addEventListener("click", (e) => {
 
 // ================= Router =================
 const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "careers", "quiz", "community", "profile"];
-const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer", "careers/quiz": "#careerQuiz" };
-const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy" }; // old links keep working
+const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer", "careers/quiz": "#careerQuiz",
+  "aircraft/compare": "#acCompareCard", "aircraft/timeline": "#timeline", "dictionary/decoder": "#decoder" };
+const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy", missions: "quiz" }; // old links keep working
 function route() {
   let [page, ...rest] = (location.hash.slice(1) || "home").split("/");
   page = PAGE_ALIASES[page] || page;
   const p = pages.includes(page) ? page : "home";
   $$(".page").forEach((s) => s.classList.toggle("active", s.id === "page-" + p));
   $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === p));
-  if (p === "dictionary" && rest.length) openTerm(decodeURIComponent(rest.join("/")));
+  if (p === "dictionary" && rest.length && !PAGE_ANCHORS[p + "/" + rest.join("/")]) openTerm(decodeURIComponent(rest.join("/")));
   if (p === "dashboard") renderDashboard();
   if (p === "profile") renderProfile();
   const anchor = PAGE_ANCHORS[p + "/" + rest.join("/")];
   if (anchor) setTimeout(() => $(anchor).scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   else window.scrollTo({ top: 0 });
-  if ((p === "lab" || p === "ops" || p === "atc") && rest[0] && $("#tool-" + rest[0])) setTimeout(() => showTool(rest[0], true), 50);
+  if ((p === "lab" || p === "ops" || p === "atc" || p === "academy") && rest[0] && $("#tool-" + rest[0])) setTimeout(() => showTool(rest[0], true), 50);
 }
 window.addEventListener("hashchange", route);
 
@@ -154,7 +155,16 @@ function renderHome() {
     .map((t) => `<button class="chip term-link" data-term="${t}">${t}</button>`).join("");
   const day = Math.floor(Date.now() / 864e5);
   const w = GLOSSARY[day % GLOSSARY.length];
-  $("#wotd").innerHTML = `<h3>${esc(w.t)}</h3><div class="full">${esc(w.f)}</div><p>${esc(w.d)}</p><a class="term-link" data-term="${esc(w.t)}">Open in glossary →</a>`;
+  const wotdHtml = () => `<h3>${esc(w.t)}</h3><div class="full">${esc(w.f)}</div><p>${esc(w.d)}</p>
+    <div class="row wotd-actions"><a class="btn ghost small term-link" data-term="${esc(w.t)}">Open in dictionary →</a>
+    <button type="button" class="btn ghost small" id="wotdSave">${isFav(w.t) ? "★ Saved" : "☆ Save"}</button>
+    ${"speechSynthesis" in window ? `<button type="button" class="btn ghost small" id="wotdSpeak">🔊 Listen</button>` : ""}</div>
+    <p class="sub small">A new term every day · ${new Date().toLocaleDateString()}</p>`;
+  $("#wotd").innerHTML = wotdHtml();
+  $("#wotd").onclick = (e) => {
+    if (e.target.id === "wotdSave") { toggleFav(w.t); e.target.textContent = isFav(w.t) ? "★ Saved" : "☆ Save"; }
+    if (e.target.id === "wotdSpeak") speak(`${w.t}. ${w.f || ""}. ${w.d}`);
+  };
   let fi = day % FACTS.length;
   const showFact = () => { $("#fact").textContent = FACTS[fi]; };
   showFact();
@@ -411,12 +421,48 @@ const ATC_LESSONS = [ATC_EXTRA_LESSONS[0], LESSONS.find((l) => l.atc), ATC_EXTRA
   if (old.length && typeof old[0] === "number") store.set("lessons", old.map((i) => LESSONS[i] && LESSONS[i].title).filter(Boolean));
 })();
 
+// ---- Lesson bookmarks ("Save for later"), stored per profile by lesson title ----
+const isBm = (title) => store.get("bookmarks", []).includes(title);
+const bmButton = (title) => `<button type="button" class="bm${isBm(title) ? " on" : ""}" data-bm="${esc(title)}" title="${isBm(title) ? "Remove bookmark" : "Save for later"}" aria-pressed="${isBm(title)}">${isBm(title) ? "🔖 Saved" : "🔖 Save"}</button>`;
+const lessonHome = (title) => ACADEMY_LESSONS.some((l) => l.title === title) ? ["academy", ACADEMY_LESSONS, "#academyLessons"]
+  : ATC_LESSONS.some((l) => l && l.title === title) ? ["atc", ATC_LESSONS, "#atcLessons"] : null;
+function bookmarkListHtml() {
+  const bm = store.get("bookmarks", []).filter(lessonHome);
+  return bm.length ? `<div class="chips bm-chips">${bm.map((t) => `<button type="button" class="chip" data-open-lesson="${esc(t)}">${lessonHome(t)[0] === "atc" ? "🎧" : "🎓"} ${esc(t)}</button>`).join("")}</div>`
+    : `<p class="sub small">No saved lessons yet. Tap <b>🔖 Save</b> on any lesson to keep it here for later.</p>`;
+}
+function renderBookmarks() { $$(".bm-list").forEach((el) => (el.innerHTML = `<div class="label">🔖 Saved for later</div>${bookmarkListHtml()}`)); }
+function openLesson(title) {
+  const h = lessonHome(title); if (!h) return;
+  const [page, list, sel] = h;
+  if (location.hash.slice(1).split("/")[0] !== page) location.hash = page;
+  setTimeout(() => {
+    const el = $(`${sel} .lesson[data-i="${list.findIndex((l) => l && l.title === title)}"]`);
+    if (el) { el.open = true; el.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  }, 80);
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".bm");
+  if (b) {
+    e.preventDefault(); e.stopPropagation(); // don't toggle the <details> the button sits in
+    const t = b.dataset.bm; let bm = store.get("bookmarks", []);
+    bm = bm.includes(t) ? bm.filter((x) => x !== t) : [...bm, t];
+    store.set("bookmarks", bm);
+    $$(".bm").filter((x) => x.dataset.bm === t).forEach((x) => (x.outerHTML = bmButton(t)));
+    toast(bm.includes(t) ? "🔖 Saved for later" : "Bookmark removed");
+    renderBookmarks();
+    return;
+  }
+  const o = e.target.closest("[data-open-lesson]");
+  if (o) { e.preventDefault(); openLesson(o.dataset.openLesson); }
+});
+
 function renderLessons(container, list, barId) {
   const done = store.get("lessons", []);
   const root = $(container);
   root.innerHTML = list.map((l, i) => `
     <details class="card lesson ${done.includes(l.title) ? "done" : ""}" data-i="${i}">
-      <summary><span class="num">${done.includes(l.title) ? "✓" : String(i + 1).padStart(2, "0")}</span>${esc(l.title)}<span class="meta">${l.mins} min</span></summary>
+      <summary><span class="num">${done.includes(l.title) ? "✓" : String(i + 1).padStart(2, "0")}</span>${esc(l.title)}<span class="meta">${l.mins} min</span>${bmButton(l.title)}</summary>
       <div class="lesson-body">
         ${linkify(l.html)}
         <div class="check-q"><b>Quick check:</b> ${esc(l.check.q)}
@@ -756,6 +802,8 @@ const CONV = [
   { name: "Speed", units: [["kt", 1], ["km/h", 1 / 1.852], ["mph", 0.868976], ["m/s", 1.943844]] },
   { name: "Altitude", units: [["ft", 1], ["m", 3.28084], ["FL", 100]] },
   { name: "Distance", units: [["NM", 1], ["km", 1 / 1.852], ["mi", 0.868976]] },
+  { name: "Vertical speed", units: [["ft/min", 1], ["m/s", 196.850394]] },
+  { name: "Weight", units: [["kg", 1], ["lb", 0.45359237], ["t", 1000]] },
   { name: "Pressure", units: [["hPa", 1], ["inHg", 33.8639], ["mmHg", 1.33322]] },
   { name: "Fuel (Jet A-1)", units: [["L", 1], ["US gal", 3.78541], ["kg", 1 / 0.8]] },
   { name: "Temperature", units: [["°C"], ["°F"], ["K"]], temp: true },
@@ -780,7 +828,7 @@ function renderConverter() {
   });
   // sensible defaults
   const set = (g, u, v) => { const el = $(`input[data-g="${g}"][data-u="${u}"]`); el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); };
-  set(0, 0, 120); set(1, 0, 35000); set(2, 0, 100); set(3, 0, 1013.25); set(4, 0, 1000); set(5, 0, 15);
+  set(0, 0, 120); set(1, 0, 35000); set(2, 0, 100); set(3, 0, 700); set(4, 0, 1000); set(5, 0, 1013.25); set(6, 0, 1000); set(7, 0, 15);
 }
 
 // ---- Squawk ----
@@ -1225,8 +1273,7 @@ function renderQ() {
 }
 $$("#quizTabs button").forEach((b) => b.onclick = () => {
   $$("#quizTabs button").forEach((x) => x.classList.toggle("active", x === b));
-  $("#q-quiz").classList.toggle("hidden", b.dataset.q !== "quiz");
-  $("#q-flash").classList.toggle("hidden", b.dataset.q !== "flash");
+  $$("#quizTabs button").forEach((x) => $("#q-" + x.dataset.q).classList.toggle("hidden", x !== b));
 });
 
 // ---- Flashcards ----
@@ -1383,6 +1430,15 @@ function renderCompare() {
       const bar = (x, cls) => `<div class="cmp-row"><div class="cmp-bar ${cls}" style="width:${((x[k] || 0) / max) * 100}%"></div><span>${fmt[k](x[k])}</span></div>`;
       return `<div class="cmp-metric"><div class="cmp-label">${label}</div>${bar(A, "a")}${bar(B, "b")}</div>`;
     }).join("") +
+    `<table class="cmp-table"><tr><th></th><th>${esc(A.name)}</th><th>${esc(B.name)}</th></tr>
+      <tr><td>Engines</td><td>${esc(A.engines)}</td><td>${esc(B.engines)}</td></tr>
+      <tr><td>Type</td><td>${esc(AC_CATS[A.cat] || "")}</td><td>${esc(AC_CATS[B.cat] || "")}</td></tr>
+      <tr><td>Manufacturer</td><td>${esc(A.maker)}</td><td>${esc(B.maker)}</td></tr>
+      <tr><td>First flight</td><td>${A.year}</td><td>${B.year}</td></tr></table>` +
+    (A.id !== B.id ? [["span", "wingspan"], ["mtow", "maximum take-off weight"]].filter(([k]) => A[k] && B[k]).map(([k, label]) => {
+      const [big, small] = A[k] >= B[k] ? [A, B] : [B, A];
+      return `<p class="sub small">📏 The ${esc(big.name)}'s ${label} is ${(big[k] / small[k]).toFixed(1)}× the ${esc(small.name)}'s.</p>`;
+    }).join("") : "") +
     `<p class="sub small">First flights: ${esc(A.name)} in ${A.year}, ${esc(B.name)} in ${B.year}${A.year !== B.year ? ` — ${Math.abs(A.year - B.year)} years apart` : ""}.</p>`;
 }
 function initAircraft() {
@@ -1895,6 +1951,7 @@ function renderProfile() {
            ["Dictionary terms opened", s.viewed / GLOSSARY.length * 100, `${s.viewed}/${GLOSSARY.length}`],
            ["Aircraft parts discovered", s.parts / Object.keys(PARTS).length * 100, `${s.parts}/${Object.keys(PARTS).length}`],
            ["ATC simulator best", s.simBest / SIM_STEPS.length * 100, `${s.simBest}/${SIM_STEPS.length}`],
+           ...(typeof missionStats === "function" ? (({ done, total }) => [["Missions completed", done / total * 100, `${done}/${total}`]])(missionStats()) : []),
            ["Quiz best", s.best * 10, `${s.best}/10`]].map(([l, p, v]) =>
            `<div class="progress-wrap"><span class="pw-label pf-l">${l}</span><div class="progress"><div class="bar" style="width:${Math.min(p, 100)}%"></div></div><span>${v}</span></div>`).join("")}
         ${s.next ? `<a class="btn small" href="#${s.next[0]}">▶ Next: ${esc(s.next[1].title)}</a>` : ""}
@@ -1908,6 +1965,10 @@ function renderProfile() {
         ${favs.length ? `<div class="chips">${favs.map((t) => `<span class="chip vocab"><a class="term-link" data-term="${esc(t)}">${esc(t)}</a><button data-unfav="${esc(t)}" title="Remove">✕</button></span>`).join("")}</div>
           <button class="btn small" id="pfFlash">🃏 Practise saved words as flashcards</button>`
           : `<p class="sub">No saved words yet. Tap ☆ on any term in the <a href="#dictionary">Dictionary</a> to save it here.</p>`}
+      </div>
+      <div class="card">
+        <div class="label">Saved lessons · ${store.get("bookmarks", []).filter(lessonHome).length}</div>
+        ${bookmarkListHtml()}
       </div>
       <div class="card">
         <div class="label">Recent quizzes · ${s.quizzes} taken</div>
