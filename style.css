@@ -1185,3 +1185,35 @@ rect.ab-terminal { fill: #93c5fd; } rect.ab-hangar { fill: #e5c07b; } rect.ab-to
 [data-theme="night"] .tl-line.pilot .bubble { background: #0f2a5c; }
 [data-theme="night"] .fx-verdict.ok { color: #4ade80; } [data-theme="night"] .btn.ok { color: #4ade80; box-shadow: 0 0 0 2px #4ade80; }
 [data-theme="night"] .edu-note { background: rgba(244,114,182,.08); }
+
+/* ================= Aviation Careers ================= */
+.cr-card { position: relative; }
+.cr-seen { position: absolute; top: .6rem; right: .7rem; color: var(--accent2); font-weight: 700; }
+.cr-detail { margin-top: 1rem; }
+.cr-skills { display: flex; flex-wrap: wrap; gap: .35rem; }
+.cr-skills .chip { cursor: default; text-transform: none; letter-spacing: 0; font-family: inherit; }
+.cr-path { margin: .2rem 0 .6rem; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: .4rem; counter-reset: crp; }
+.cr-path li { counter-increment: crp; display: flex; align-items: center; gap: .45rem; padding: .4rem .7rem; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.6); font-size: .9rem; }
+.cr-path li::before { content: counter(crp); display: grid; place-items: center; width: 1.35rem; height: 1.35rem; border-radius: 50%; background: var(--accent); color: #fff; font: 700 .72rem var(--font-mono); flex: none; }
+.cr-path li:not(:last-child)::after { content: "→"; color: var(--muted); margin-left: .2rem; }
+.cr-related { flex-wrap: wrap; gap: .5rem; }
+.cq-prog { flex: none; margin-bottom: 1rem; }
+.cq-q { margin: 0 0 .8rem; }
+.cq-opts { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.cq-top { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.cq-match { border: 1px solid var(--line); border-radius: 12px; padding: .85rem 1rem; background: rgba(255,255,255,.55); display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+.cq-match .progress { flex: none; width: 100%; }
+.cq-match.best { box-shadow: 0 0 0 2px var(--accent2), 0 8px 22px rgba(236,72,153,.15); }
+.cq-m-head { display: flex; align-items: center; gap: .6rem; width: 100%; }
+.cq-m-head b { display: block; font-family: var(--font-hud); }
+.cq-m-head small { color: var(--muted); }
+.cq-pct { margin-left: auto; font: 700 1.3rem var(--font-mono); color: var(--accent2); }
+.cq-all { margin: 1rem 0; }
+.cq-all summary { cursor: pointer; font-weight: 600; }
+.cq-all ul { list-style: none; padding: 0; margin: .6rem 0 0; display: grid; gap: .4rem; }
+.cq-all li { display: grid; grid-template-columns: minmax(0, 15rem) 1fr 3rem; align-items: center; gap: .6rem; font-size: .92rem; }
+.cq-all li .progress, .cq-all li .bar { display: block; }
+.cq-all li b { text-align: right; font-family: var(--font-mono); }
+.cq-last:empty { display: none; }
+@media (max-width: 560px) { .cq-all li { grid-template-columns: 1fr 3rem; } .cq-all li .progress { grid-column: 1 / -1; grid-row: 2; } }
+[data-theme="night"] .cr-path li, [data-theme="night"] .cq-match { background-color: rgba(10, 18, 42, .7); }

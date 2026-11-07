@@ -24,6 +24,7 @@
     <a href="#atc" data-page="atc">ATC &amp; Comms</a>
     <a href="#dictionary" data-page="dictionary">Dictionary</a>
     <a href="#aircraft" data-page="aircraft">Aircraft</a>
+    <a href="#careers" data-page="careers">Careers</a>
     <a href="#quiz" data-page="quiz">Knowledge Check</a>
     <a href="#community" data-page="community">Community</a>
   </nav>
@@ -103,6 +104,7 @@
     <a class="card link" href="#quiz"><div class="card-ico">🏆</div><h3>Knowledge Check</h3><p>Take aviation quizzes and review with flashcards.</p><span class="go">Test yourself →</span></a>
     <a class="card link" href="#community"><div class="card-ico">💬</div><h3>Community</h3><p>Ask questions and discuss aviation.</p><span class="go">Join the discussion →</span></a>
     <a class="card link" href="#aircraft"><div class="card-ico">🛩</div><h3>Aircraft Library</h3><p>Explore different aircraft and their characteristics.</p><span class="go">Explore aircraft →</span></a>
+    <a class="card link" href="#careers"><div class="card-ico">🧭</div><h3>Aviation Careers</h3><p>Meet the pilots, engineers, controllers and planners behind every flight, and take the Career Match Quiz.</p><span class="go">Find your path →</span></a>
   </div>
 
   <h2 class="mt">Hands-on</h2>
@@ -315,6 +317,24 @@
   </div>
 </section>
 
+<!-- ================= CAREERS ================= -->
+<section id="page-careers" class="page">
+  <h2>Aviation Careers</h2>
+  <p class="sub">AeroLearn doesn't just teach aircraft — meet the people behind aviation. Explore eight careers, then take the Career Match Quiz to see which paths fit your interests.</p>
+  <div class="row"><a class="btn" href="#careers/quiz">🧭 Take the Career Match Quiz</a><span class="lab-score" id="crSeen"></span></div>
+
+  <h2 class="mt">Explore careers</h2>
+  <div class="rl-grid cr-grid" id="crGrid"></div>
+  <div class="card rl-detail cr-detail" id="crDetail"></div>
+
+  <div class="card quiz mt" id="careerQuiz">
+    <div class="label">Career Match Quiz</div>
+    <p class="sub small">Answer 8 quick questions about what you enjoy. There are no wrong answers.</p>
+    <div id="cqBody"></div>
+    <p class="sub small cq-last" id="cqLast"></p>
+  </div>
+</section>
+
 <!-- ================= DICTIONARY ================= -->
 <section id="page-dictionary" class="page">
   <h2>Aviation Dictionary</h2>
@@ -474,7 +494,7 @@
   <!-- Airport Roles -->
   <div class="tool card" id="tool-roles" data-label="👩‍✈️ Airport Roles">
     <h3>Airport Roles</h3>
-    <p class="sub">A single flight needs dozens of people. Step through a flight from planning to arrival and see who's working at each moment. Click anyone to learn about their job.</p>
+    <p class="sub">A single flight needs dozens of people. Step through a flight from planning to arrival and see who's working at each moment. Click anyone to learn about their job. Thinking about it as a career? <a href="#careers">Explore aviation careers →</a></p>
     <div class="seg rl-phases" id="rlPhases"></div>
     <p class="rl-phase-d" id="rlPhaseD"></p>
     <div class="rl-grid" id="rlGrid"></div>
@@ -782,5 +802,6 @@
 
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script src="careers.js"></script>
 </body>
 </html>

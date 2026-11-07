@@ -9,7 +9,7 @@ const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { co
 // Global keys are shared by everyone on this device; all other keys belong to the active profile.
 // The built-in "guest" profile uses the original un-prefixed keys, so earlier progress is kept.
 const GLOBAL_KEYS = ["posts", "profiles", "current"];
-const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone", "airportMap"];
+const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone", "airportMap", "careersSeen", "careerMatch"];
 const rawGet = (key, def) => { try { const v = localStorage.getItem(key); return v === null ? def : JSON.parse(v); } catch { return def; } };
 const rawSet = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 let CURRENT = rawGet("sky_current", "guest");
@@ -61,8 +61,8 @@ document.addEventListener("click", (e) => {
 });
 
 // ================= Router =================
-const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "quiz", "community", "profile"];
-const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer" };
+const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "careers", "quiz", "community", "profile"];
+const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer", "careers/quiz": "#careerQuiz" };
 const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy" }; // old links keep working
 function route() {
   let [page, ...rest] = (location.hash.slice(1) || "home").split("/");
