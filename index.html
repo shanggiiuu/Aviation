@@ -29,6 +29,7 @@
     <a href="#community" data-page="community">Community</a>
   </nav>
   <div class="hdg-tape" aria-hidden="true"><div class="hdg-track" id="hdgTrack"></div><div class="hdg-mark"></div><div class="hdg-read" id="hdgRead">000</div></div>
+  <select class="lang-sel" id="langSel" aria-label="Language / Wika" title="Language / Wika"></select>
   <button class="theme-toggle" id="themeToggle" type="button" title="Switch to night mode" aria-label="Switch to night mode">🌙</button>
   <a class="account-chip" href="#profile" title="Your profile"><span id="acctAvatar">👤</span><span id="acctName">Guest</span><span class="xp">⭐ <span id="xp">0</span> XP</span></a>
 </header>
@@ -113,6 +114,16 @@
     <a class="card link" href="#aircraft/explorer"><div class="card-ico">🔍</div><h3>Aircraft explorer</h3><p>Click different aircraft parts to learn their names and functions.</p><span class="go">Explore parts →</span></a>
     <a class="card link" href="#dashboard"><div class="card-ico">📊</div><h3>Aviation dashboard</h3><p>Flight terminology, airport information, aircraft profiles, and weather education.</p><span class="go">Open dashboard →</span></a>
     <a class="card link" href="#profile"><div class="card-ico">👤</div><h3>Learning accounts</h3><p>User profiles, saved vocabulary, learning progress, and community discussions.</p><span class="go">Your profile →</span></a>
+  </div>
+
+  <h2 class="mt">Handy tools</h2>
+  <div class="grid features small-features">
+    <a class="card link" href="#" data-open-aero><div class="card-ico">💬</div><h3>Ask Aero</h3><p>A study helper that explains aviation terms, aircraft and units.</p><span class="go">Ask a question →</span></a>
+    <a class="card link" href="#dictionary/decoder"><div class="card-ico">🔡</div><h3>Abbreviation Decoder</h3><p>Paste abbreviations or a short list and get every term explained.</p><span class="go">Decode →</span></a>
+    <a class="card link" href="#aircraft/compare"><div class="card-ico">⚖️</div><h3>Compare Aircraft</h3><p>Size, engines, range, seats and weight side by side.</p><span class="go">Compare →</span></a>
+    <a class="card link" href="#aircraft/timeline"><div class="card-ico">🕰️</div><h3>Aviation Timeline</h3><p>From the first balloons to flight on Mars.</p><span class="go">Explore history →</span></a>
+    <a class="card link" href="#academy/convert"><div class="card-ico">🔁</div><h3>Units Converter</h3><p>Feet ↔ metres, knots ↔ km/h, NM ↔ km, and more.</p><span class="go">Convert →</span></a>
+    <a class="card link" href="#profile"><div class="card-ico">🔖</div><h3>Saved Lessons</h3><p>Tap 🔖 on any lesson to save it for later.</p><span class="go">My bookmarks →</span></a>
   </div>
 
   <div class="grid two">
@@ -317,6 +328,13 @@
     <div class="row"><select id="acA"></select><span class="vs">VS</span><select id="acB"></select></div>
     <div id="acCompare" class="ac-compare"></div>
   </div>
+
+  <div class="card mt" id="timeline">
+    <div class="label">Aviation timeline</div>
+    <p class="sub small" id="tlNote"></p>
+    <div class="chips filters" id="tlEras"></div>
+    <ol class="tl-list" id="tlList"></ol>
+  </div>
 </section>
 
 <!-- ================= CAREERS ================= -->
@@ -341,6 +359,17 @@
 <section id="page-dictionary" class="page">
   <h2>Aviation Dictionary</h2>
   <p class="sub">Search words like VHF, PMR, ILS, IFR, and transponder.</p>
+  <div class="card decoder" id="decoder">
+    <div class="label">Abbreviation decoder</div>
+    <p class="sub small" data-i18n="decSub">Paste an abbreviation, a list of terms, or a short sentence, and every term AeroLearn knows gets explained.</p>
+    <textarea id="decIn" rows="3" placeholder="e.g. ILS, VOR, QNH, ATIS — or: Expect ILS approach runway 27, QNH 1013"></textarea>
+    <div class="chips" id="decSamples">
+      <button type="button" class="chip" data-s="ILS, VOR, NDB, DME">Navigation aids</button>
+      <button type="button" class="chip" data-s="ATC, ATIS, QNH, METAR, TAF, NOTAM">Briefing words</button>
+      <button type="button" class="chip" data-s="Cleared ILS approach runway 27, QNH 1013, squawk 7000">A sentence</button>
+    </div>
+    <div id="decOut" class="dec-out"></div>
+  </div>
   <div class="gloss-controls">
     <input id="gSearch" type="search" placeholder="Search terms, abbreviations or definitions…" autocomplete="off">
     <select id="gSort"><option value="az">A → Z</option><option value="cat">By category</option></select>
@@ -814,5 +843,7 @@
 <script src="app.js"></script>
 <script src="careers.js"></script>
 <script src="missions.js"></script>
+<script src="extras.js"></script>
+<script src="i18n.js"></script>
 </body>
 </html>
