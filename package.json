@@ -1,0 +1,18 @@
+{
+  "name": "aerolearn",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w @aerolearn/api\" \"npm run dev -w @aerolearn/web\"",
+    "migrate": "npm run migrate -w @aerolearn/api",
+    "build": "npm run build -w @aerolearn/web && npm run build -w @aerolearn/api",
+    "start": "npm run start -w @aerolearn/api",
+    "test": "npm run test -w @aerolearn/api",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.6.3"
+  }
+}

@@ -65,9 +65,31 @@ const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary"
 const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer", "careers/quiz": "#careerQuiz",
   "aircraft/compare": "#acCompareCard", "aircraft/timeline": "#timeline", "dictionary/decoder": "#decoder" };
 const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy", missions: "quiz" }; // old links keep working
+// ---- Running inside the React app (apps/web) ----
+// Pages that now live in React are handed to the parent; other navigation is reported so its URL stays in step.
+const EMBEDDED = document.documentElement.classList.contains("embedded");
+const REACT_PAGES = { community: "/community", profile: "/profile" };
+const toParent = (msg) => { if (EMBEDDED) window.parent.postMessage(msg, location.origin); };
+let lastLegacyHash = "#home";
+if (EMBEDDED) {
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || e.source !== window.parent) return;
+    const d = e.data || {};
+    if (d.type === "aero:theme" && (d.theme === "day" || d.theme === "night")) { document.documentElement.dataset.theme = d.theme; rawSet("sky_theme", d.theme); }
+    if (d.type === "aero:lang" && typeof applyLang === "function") applyLang(d.lang);
+  });
+}
+
 function route() {
   let [page, ...rest] = (location.hash.slice(1) || "home").split("/");
   page = PAGE_ALIASES[page] || page;
+  if (EMBEDDED && REACT_PAGES[page]) {
+    toParent({ type: "aero:navigate", to: REACT_PAGES[page] + (rest.length ? "/" + rest.join("/") : "") });
+    history.replaceState(null, "", location.pathname + location.search + lastLegacyHash); // stay where we were
+    return route();
+  }
+  lastLegacyHash = location.hash || "#home";
+  toParent({ type: "aero:route", hash: lastLegacyHash });
   const p = pages.includes(page) ? page : "home";
   $$(".page").forEach((s) => s.classList.toggle("active", s.id === "page-" + p));
   $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === p));

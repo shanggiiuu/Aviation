@@ -1256,6 +1256,9 @@ rect.ab-terminal { fill: #93c5fd; } rect.ab-hangar { fill: #e5c07b; } rect.ab-to
 [data-theme="night"] .ms-card, [data-theme="night"] .ms-line { background-color: rgba(10, 18, 42, .7); }
 [data-theme="night"] .ms-line.pilot { background-color: rgba(37, 99, 235, .14); } [data-theme="night"] .ms-line.tower { background-color: rgba(236, 72, 153, .12); }
 
+/* embedded inside the React app: it provides the top bar */
+.embedded .topbar { display: none; }
+
 /* ================= Small features ================= */
 /* language */
 .lang-sel { height: 38px; padding: 0 .5rem; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.65); color: var(--text); font: 600 .8rem var(--font-mono); cursor: pointer; width: auto; }

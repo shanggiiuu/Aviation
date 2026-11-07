@@ -10,7 +10,9 @@
 <script>/* apply saved/system theme before first paint to avoid a flash */
 (function () { var t; try { t = JSON.parse(localStorage.getItem("sky_theme")); } catch (e) {}
   if (t !== "night" && t !== "day") t = matchMedia("(prefers-color-scheme: dark)").matches ? "night" : "day";
-  document.documentElement.dataset.theme = t; })();</script>
+  document.documentElement.dataset.theme = t;
+  /* inside the React app: hide this page's own top bar (the app provides navigation) */
+  if (/[?&]embed=1\b/.test(location.search) && window.parent !== window) document.documentElement.classList.add("embedded"); })();</script>
 </head>
 <body>
 <header class="topbar">
