@@ -25,7 +25,7 @@ export const setPref = (k: "theme" | "lang", v: string) => write(PREFIX + k, v);
 
 // ---- URL ↔ classic-site hash ----
 // /academy ↔ #academy, /atc/sim ↔ #atc/sim, /missions ↔ #quiz, / ↔ #home
-export const LEGACY_PAGES = ["dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "careers", "missions"];
+export const LEGACY_PAGES = ["dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "careers", "missions", "shop"];
 export function hashForPath(pathname: string) {
   let p = pathname.replace(/^\/+|\/+$/g, "");
   if (p === "missions" || p.startsWith("missions/")) p = "quiz" + p.slice(8);

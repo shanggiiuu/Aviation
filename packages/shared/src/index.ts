@@ -43,7 +43,7 @@ export function rankFor(xp: number) {
 // ---------- Learning progress ----------
 // Keys the classic site keeps in localStorage (as "sky_<key>") that are synced to the account.
 export const SYNC_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "quizHistory", "simBest", "simDone", "partsFound", "exBest",
-  "labDone", "airportMap", "careersSeen", "careerMatch", "missions", "bookmarks"] as const;
+  "labDone", "airportMap", "careersSeen", "careerMatch", "missions", "bookmarks", "coins", "shop"] as const;
 export type SyncKey = (typeof SYNC_KEYS)[number];
 export type Progress = Partial<Record<SyncKey, unknown>>;
 
@@ -53,7 +53,8 @@ export const progressSchema = z.record(z.string(), z.unknown()).transform((o) =>
   return out;
 });
 
-const MAX_KEYS = new Set<SyncKey>(["xp", "best", "simBest", "exBest"]);
+// "coins" is lifetime Aero Coins earned (never decreases); the spendable balance is derived from it minus owned items.
+const MAX_KEYS = new Set<SyncKey>(["xp", "best", "simBest", "exBest", "coins"]);
 const UNION_KEYS = new Set<SyncKey>(["fav", "viewed", "lessons", "labDone", "partsFound", "careersSeen", "bookmarks"]);
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const unionBy = <T>(a: T[], b: T[], id: (x: T) => string) => {
@@ -81,6 +82,15 @@ export function mergeProgress(a: Progress = {}, b: Progress = {}): Progress {
         m[id] = !prev ? cur : { ...prev, ...cur, stars: Math.max(prev.stars ?? 0, cur.stars ?? 0), best: Math.max(prev.best ?? 0, cur.best ?? 0) };
       }
       out[k] = m;
+    } else if (k === "shop" && isObj(x) && isObj(y)) {
+      // owned items are a union (a purchase on either device is kept); equipped items, names etc.: newest wins
+      const own = (v: unknown) => (Array.isArray(v) ? v.filter((i): i is string => typeof i === "string") : []);
+      const stats: Record<string, unknown> = { ...(isObj(x.petStats) ? x.petStats : {}) };
+      for (const [id, v] of Object.entries(isObj(y.petStats) ? y.petStats : {})) {
+        const p = stats[id] as { n?: number } | undefined, c = v as { n?: number };
+        stats[id] = { ...p, ...c, n: Math.max(p?.n ?? 0, c?.n ?? 0) };
+      }
+      out[k] = { ...x, ...y, owned: [...new Set([...own(x.owned), ...own(y.owned)])], petStats: stats };
     } else out[k] = y; // airportMap, careerMatch and anything unexpected: newest wins
   }
   return out;

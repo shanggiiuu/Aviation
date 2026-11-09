@@ -9,7 +9,7 @@ const I18N = [
   ['#nav a[data-page="home"]', { fil: "Tahanan" }], ['#nav a[data-page="academy"]', { fil: "Akademya" }],
   ['#nav a[data-page="ops"]', { fil: "Paliparan" }], ['#nav a[data-page="atc"]', { fil: "ATC at Komunikasyon" }],
   ['#nav a[data-page="dictionary"]', { fil: "Diksiyonaryo" }], ['#nav a[data-page="aircraft"]', { fil: "Mga Eroplano" }],
-  ['#nav a[data-page="careers"]', { fil: "Mga Karera" }], ['#nav a[data-page="quiz"]', { fil: "Mga Misyon" }],
+  ['#nav a[data-page="careers"]', { fil: "Mga Karera" }], ['#nav a[data-page="quiz"]', { fil: "Mga Misyon" }], ['#nav a[data-page="shop"]', { fil: "Tindahan" }],
   ['#nav a[data-page="community"]', { fil: "Komunidad" }],
   // home
   ["#page-home .hero h1", { fil: 'Unawain ang himpapawid.<span class="h1-sub">Isang aralin sa bawat pagkakataon.</span>' }],

@@ -50,6 +50,8 @@ h2.no-bar { text-transform: none; letter-spacing: .02em; } h2.no-bar::before { d
 .lang-sel { padding: 0 .4rem; font: 600 .78rem var(--font-mono); } .icon-btn { width: 36px; font-size: 1rem; }
 .account-chip { display: flex; align-items: center; gap: .45rem; text-decoration: none; color: var(--text); padding: .3rem .65rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: .85rem; white-space: nowrap; }
 .account-chip .xp { font: 700 .72rem var(--font-mono); color: var(--accent2); }
+.account-chip .xp.coins { color: #b45309; }
+[data-theme="night"] .account-chip .xp.coins { color: #fcd34d; }
 .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .sync-dot.saved { background: var(--ok); } .sync-dot.syncing { background: #f59e0b; } .sync-dot.error { background: var(--red); }
 @media (max-width: 760px) { .nav { order: 3; flex-basis: 100%; } .acct-name, .account-chip .xp { display: none; } }

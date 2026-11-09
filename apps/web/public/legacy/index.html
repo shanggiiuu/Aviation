@@ -28,12 +28,13 @@
     <a href="#aircraft" data-page="aircraft">Aircraft</a>
     <a href="#careers" data-page="careers">Careers</a>
     <a href="#quiz" data-page="quiz">Missions</a>
+    <a href="#shop" data-page="shop">Shop</a>
     <a href="#community" data-page="community">Community</a>
   </nav>
   <div class="hdg-tape" aria-hidden="true"><div class="hdg-track" id="hdgTrack"></div><div class="hdg-mark"></div><div class="hdg-read" id="hdgRead">000</div></div>
   <select class="lang-sel" id="langSel" aria-label="Language / Wika" title="Language / Wika"></select>
   <button class="theme-toggle" id="themeToggle" type="button" title="Switch to night mode" aria-label="Switch to night mode">🌙</button>
-  <a class="account-chip" href="#profile" title="Your profile"><span id="acctAvatar">👤</span><span id="acctName">Guest</span><span class="xp">⭐ <span id="xp">0</span> XP</span></a>
+  <a class="account-chip" href="#profile" title="Your profile"><span id="acctAvatar">👤</span><span id="acctName">Guest</span><span class="xp">⭐ <span id="xp">0</span> XP</span><span class="xp coins">🪙 <span id="coins">0</span></span></a>
 </header>
 
 <main>
@@ -337,6 +338,19 @@
     <div class="chips filters" id="tlEras"></div>
     <ol class="tl-list" id="tlList"></ol>
   </div>
+</section>
+
+<!-- ================= SHOP ================= -->
+<section id="page-shop" class="page">
+  <h2>AeroLearn Shop</h2>
+  <p class="sub">A little hangar of rewards. Earn Aero Coins by learning, then spend them on companions, pet gear, hangar decorations, themes and profile cosmetics. No real money, ever, and spending coins never touches your XP.</p>
+  <div class="card shop-wallet" id="shopWallet"></div>
+  <div class="chips" id="shopTabs">
+    <button class="chip active" data-tab="shop">🛍️ Shop</button>
+    <button class="chip" data-tab="hangar">🏠 My hangar</button>
+    <button class="chip" data-tab="earn">🪙 How to earn</button>
+  </div>
+  <div id="shopBody"></div>
 </section>
 
 <!-- ================= CAREERS ================= -->
@@ -845,6 +859,7 @@
 <script src="app.js"></script>
 <script src="careers.js"></script>
 <script src="missions.js"></script>
+<script src="shop.js"></script>
 <script src="extras.js"></script>
 <script src="i18n.js"></script>
 </body>

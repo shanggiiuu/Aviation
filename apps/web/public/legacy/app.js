@@ -9,7 +9,7 @@ const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { co
 // Global keys are shared by everyone on this device; all other keys belong to the active profile.
 // The built-in "guest" profile uses the original un-prefixed keys, so earlier progress is kept.
 const GLOBAL_KEYS = ["posts", "profiles", "current"];
-const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone", "airportMap", "careersSeen", "careerMatch", "missions", "bookmarks"];
+const USER_KEYS = ["xp", "fav", "custom", "viewed", "lessons", "best", "voted", "cname", "quizHistory", "simBest", "simDone", "partsFound", "exBest", "labDone", "airportMap", "careersSeen", "careerMatch", "missions", "bookmarks", "coins", "shop"];
 const rawGet = (key, def) => { try { const v = localStorage.getItem(key); return v === null ? def : JSON.parse(v); } catch { return def; } };
 const rawSet = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 let CURRENT = rawGet("sky_current", "guest");
@@ -34,9 +34,10 @@ function toast(msg) {
 function addXP(n, msg) {
   const xp = store.get("xp", 0) + n;
   store.set("xp", xp);
+  const coins = typeof earnCoins === "function" ? earnCoins(n) : 0; // shop.js: every XP also earns Aero Coins
   const el = $("#xp"); el.textContent = xp;
   el.parentElement.classList.remove("bump"); void el.offsetWidth; el.parentElement.classList.add("bump");
-  if (msg) toast(`+${n} XP · ${msg}`);
+  if (msg) toast(`+${n} XP${coins ? ` · +${coins} 🪙` : ""} · ${msg}`);
 }
 $("#xp").textContent = store.get("xp", 0);
 $("#acctAvatar").textContent = currentProfile().avatar;
@@ -61,7 +62,7 @@ document.addEventListener("click", (e) => {
 });
 
 // ================= Router =================
-const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "careers", "quiz", "community", "profile"];
+const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "careers", "quiz", "shop", "community", "profile"];
 const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer", "careers/quiz": "#careerQuiz",
   "aircraft/compare": "#acCompareCard", "aircraft/timeline": "#timeline", "dictionary/decoder": "#decoder" };
 const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy", missions: "quiz" }; // old links keep working

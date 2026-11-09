@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { rankFor } from "@aerolearn/shared";
 import { useAuth } from "../auth";
@@ -6,7 +7,7 @@ import { usePrefs, type StringKey } from "../prefs";
 
 const NAV: [string, StringKey][] = [
   ["/", "home"], ["/dashboard", "dashboard"], ["/academy", "academy"], ["/lab", "lab"], ["/ops", "ops"], ["/atc", "atc"],
-  ["/dictionary", "dictionary"], ["/aircraft", "aircraft"], ["/careers", "careers"], ["/missions", "missions"],
+  ["/dictionary", "dictionary"], ["/aircraft", "aircraft"], ["/careers", "careers"], ["/missions", "missions"], ["/shop", "shop"],
   ["/community", "community"], ["/live", "live"],
 ];
 
@@ -16,6 +17,7 @@ export function Layout({ legacy = false }: { legacy?: boolean }) {
   const { theme, toggleTheme, lang, setLang, t } = usePrefs();
   const { pathname } = useLocation();
   const xp = typeof progress.xp === "number" ? progress.xp : 0;
+  const coins = useCoinBalance();
   const statusText = user ? (status === "syncing" ? t("syncing") : status === "error" ? t("syncError") : t("saved")) : t("local");
 
   return (
@@ -38,6 +40,7 @@ export function Layout({ legacy = false }: { legacy?: boolean }) {
             <span>{user ? user.avatar : "👤"}</span>
             <span className="acct-name">{user ? user.displayName : t("signIn")}</span>
             <span className="xp">⭐ {xp} XP · {rankFor(xp).name}</span>
+            {coins !== null && <span className="xp coins" title="Aero Coins">🪙 {coins.toLocaleString()}</span>}
             <span className={`sync-dot ${user ? status : "local"}`} aria-label={statusText} />
           </Link>
         </div>
@@ -45,4 +48,16 @@ export function Layout({ legacy = false }: { legacy?: boolean }) {
       <main className={legacy ? "main-legacy" : "main"}><Outlet /></main>
     </div>
   );
+}
+
+// The classic site's shop works out the spendable Aero Coin balance and leaves it in localStorage for this top bar.
+function useCoinBalance() {
+  const read = () => { try { const v = JSON.parse(localStorage.getItem("sky_coinbal") ?? "null"); return typeof v === "number" ? v : null; } catch { return null; } };
+  const [coins, setCoins] = useState<number | null>(read);
+  useEffect(() => {
+    const on = (e: StorageEvent) => { if (e.key === "sky_coinbal" || e.key === null) setCoins(read()); };
+    window.addEventListener("storage", on);
+    return () => window.removeEventListener("storage", on);
+  }, []);
+  return coins;
 }
