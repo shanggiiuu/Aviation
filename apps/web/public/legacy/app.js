@@ -69,7 +69,8 @@ const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy
 // ---- Running inside the React app (apps/web) ----
 // Pages that now live in React are handed to the parent; other navigation is reported so its URL stays in step.
 const EMBEDDED = document.documentElement.classList.contains("embedded");
-const REACT_PAGES = { community: "/community", profile: "/profile" };
+const STATIC_HOST = /[?&]static=1(&|$)/.test(location.search); // static-site build: no React account/community pages to hand over to
+const REACT_PAGES = STATIC_HOST ? {} : { community: "/community", profile: "/profile" };
 const toParent = (msg) => { if (EMBEDDED) window.parent.postMessage(msg, location.origin); };
 let lastLegacyHash = "#home";
 if (EMBEDDED) {

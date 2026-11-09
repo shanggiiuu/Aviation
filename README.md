@@ -80,6 +80,10 @@ npm run dev                 # API on :3001 + React on http://localhost:5173 (wit
 | `npm run typecheck` | Type-check every package |
 | `npm run build && npm start` | Production: one Node server on `PORT` serving the API and the built React app |
 
+### Static site (no server)
+
+`npm run build:static` builds `apps/web/dist` without the API. Accounts, the shared community and live weather are left out; progress, on-device profiles, the shop and a browser-only community still work. On Render, create a **Static Site** (or use `render.yaml`): build command `npm ci && npm run build:static`, publish directory `apps/web/dist`, and a rewrite rule `/*` → `/index.html`.
+
 The classic site still works on its own: open `apps/web/public/legacy/index.html` directly. Progress then stays in that browser only.
 
 ## Notes

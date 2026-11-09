@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { LoginInput, ProfileUpdate, RegisterInput, User } from "@aerolearn/shared";
 import { api } from "./api";
+import { STATIC } from "./config";
 
 interface AuthState {
   user: User | null;
@@ -15,9 +16,10 @@ const AuthCtx = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!STATIC);
 
   useEffect(() => {
+    if (STATIC) return; // no server: everyone learns as a local guest
     api<{ user: User | null }>("/auth/me").then((r) => setUser(r.user)).catch(() => setUser(null)).finally(() => setLoading(false));
   }, []);
 

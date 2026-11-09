@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSync } from "../sync";
 import { hashForPath, pathForHash } from "../legacy";
+import { STATIC } from "../config";
 
 export function LegacyFrame() {
   const { pathname } = useLocation();
@@ -15,7 +16,7 @@ export function LegacyFrame() {
   pathRef.current = pathname;
 
   // Only rebuild the src when the frame must reload (e.g. progress replaced after sign-in), not on every navigation.
-  const src = useMemo(() => `/legacy/index.html?embed=1${hashForPath(pathRef.current)}`, [legacyVersion]);
+  const src = useMemo(() => `/legacy/index.html?embed=1${STATIC ? "&static=1" : ""}${hashForPath(pathRef.current)}`, [legacyVersion]);
 
   useEffect(() => {
     const w = ref.current?.contentWindow;

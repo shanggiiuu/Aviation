@@ -8,10 +8,10 @@ const frame = () => document.querySelector<HTMLIFrameElement>("iframe.legacy-fra
 
 const STRINGS = {
   en: { home: "Home", dashboard: "Dashboard", academy: "Academy", lab: "Lab", ops: "Airport", atc: "ATC & Comms", dictionary: "Dictionary",
-    aircraft: "Aircraft", careers: "Careers", missions: "Missions", shop: "Shop", community: "Community", live: "Live weather", signIn: "Sign in",
+    aircraft: "Aircraft", careers: "Careers", missions: "Missions", shop: "Shop", community: "Community", live: "Live weather", signIn: "Sign in", profile: "Profile",
     saved: "Saved", syncing: "Saving…", syncError: "Not saved — retrying when you continue", local: "Progress saved on this device only" },
   fil: { home: "Tahanan", dashboard: "Dashboard", academy: "Akademya", lab: "Lab", ops: "Paliparan", atc: "ATC at Komunikasyon", dictionary: "Diksiyonaryo",
-    aircraft: "Mga Eroplano", careers: "Mga Karera", missions: "Mga Misyon", shop: "Tindahan", community: "Komunidad", live: "Live na panahon", signIn: "Mag-sign in",
+    aircraft: "Mga Eroplano", careers: "Mga Karera", missions: "Mga Misyon", shop: "Tindahan", community: "Komunidad", live: "Live na panahon", signIn: "Mag-sign in", profile: "Profile",
     saved: "Naka-save", syncing: "Nagse-save…", syncError: "Hindi na-save — susubukan ulit", local: "Sa device na ito lang naka-save ang progreso" },
 } as const;
 export type StringKey = keyof (typeof STRINGS)["en"];

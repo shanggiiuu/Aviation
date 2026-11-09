@@ -4,12 +4,13 @@ import { rankFor } from "@aerolearn/shared";
 import { useAuth } from "../auth";
 import { useSync } from "../sync";
 import { usePrefs, type StringKey } from "../prefs";
+import { STATIC } from "../config";
 
 const NAV: [string, StringKey][] = [
   ["/", "home"], ["/dashboard", "dashboard"], ["/academy", "academy"], ["/lab", "lab"], ["/ops", "ops"], ["/atc", "atc"],
   ["/dictionary", "dictionary"], ["/aircraft", "aircraft"], ["/careers", "careers"], ["/missions", "missions"], ["/shop", "shop"],
   ["/community", "community"], ["/live", "live"],
-];
+].filter(([to]) => !STATIC || (to !== "/community" && to !== "/live")) as [string, StringKey][];
 
 export function Layout({ legacy = false }: { legacy?: boolean }) {
   const { user } = useAuth();
@@ -36,9 +37,9 @@ export function Layout({ legacy = false }: { legacy?: boolean }) {
           <button type="button" className="icon-btn" onClick={toggleTheme} title={theme === "night" ? "Switch to day mode" : "Switch to night mode"} aria-label="Toggle day/night mode">
             {theme === "night" ? "☀️" : "🌙"}
           </button>
-          <Link className="account-chip" to={user ? "/profile" : "/login"} title={statusText}>
+          <Link className="account-chip" to={user || STATIC ? "/profile" : "/login"} title={statusText}>
             <span>{user ? user.avatar : "👤"}</span>
-            <span className="acct-name">{user ? user.displayName : t("signIn")}</span>
+            <span className="acct-name">{user ? user.displayName : STATIC ? t("profile") : t("signIn")}</span>
             <span className="xp">⭐ {xp} XP · {rankFor(xp).name}</span>
             {coins !== null && <span className="xp coins" title="Aero Coins">🪙 {coins.toLocaleString()}</span>}
             <span className={`sync-dot ${user ? status : "local"}`} aria-label={statusText} />
