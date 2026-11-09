@@ -162,7 +162,7 @@ function aeroAnswer(raw) {
   const words = low.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !DEC_STOP.has(w));
   const scored = allTerms().map((x) => ({ x, s: words.filter((w) => (x.d + " " + (x.f || "")).toLowerCase().includes(w)).length })).filter((r) => r.s).sort((a, b) => b.s - a.s).slice(0, 4);
   if (scored.length) return `${L("I'm not sure exactly, but these terms might help:", "Hindi ako sigurado, pero baka makatulong ang mga terminong ito:")}<div class="chips">${scored.map((r) => `<button class="chip term-link" data-term="${esc(r.x.t)}">${esc(r.x.t)}</button>`).join("")}</div>`;
-  return L(`🤔 I don't know that one yet. Try a single term like "QNH", or <a href="#community">ask the Community</a>.`, `🤔 Hindi ko pa alam iyan. Subukan ang isang termino tulad ng "QNH", o <a href="#community">magtanong sa Komunidad</a>.`);
+  return L(`🤔 I don't know that one yet. Try a single term like "QNH", or search the <a href="#dictionary">Dictionary</a>.`, `🤔 Hindi ko pa alam iyan. Subukan ang isang termino tulad ng "QNH", o maghanap sa <a href="#dictionary">Diksiyonaryo</a>.`);
 }
 const AERO_SUGGEST = () => [L("What is QNH?", "Ano ang QNH?"), "VOR vs NDB", "Spell G-ABCD", "250 knots to km/h", L("Tell me about the A380", "A380"), "ILS, ATIS, METAR"];
 function aeroBubble(who, html) {

@@ -65,12 +65,11 @@ describe("accounts", () => {
     const { cookie } = await signUp();
     const upd = await app.inject({ method: "PATCH", url: "/api/me", headers: { ...H, cookie }, payload: { avatar: "🚁", goal: "Student pilot" } });
     expect(upd.json().user.avatar).toBe("🚁");
-    await app.inject({ method: "POST", url: "/api/posts", headers: { ...H, cookie }, payload: { tag: "General", title: "Hello there", body: "First post" } });
     const wrong = await app.inject({ method: "DELETE", url: "/api/me", headers: { ...H, cookie }, payload: { password: "nope" } });
     expect(wrong.statusCode).toBe(401);
     const del = await app.inject({ method: "DELETE", url: "/api/me", headers: { ...H, cookie }, payload: { password: "correct horse 1" } });
     expect(del.statusCode).toBe(200);
-    expect((await db.query("SELECT count(*)::int n FROM posts")).rows[0].n).toBe(0);
+    expect((await db.query("SELECT count(*)::int n FROM users")).rows[0].n).toBe(0);
   });
 });
 
@@ -91,38 +90,6 @@ describe("progress", () => {
     expect(d.notAKey).toBeUndefined();
     await app.inject({ method: "PUT", url: "/api/progress", headers: { ...H, cookie }, payload: { data: { ...d, lessons: ["A"] } } });
     expect((await app.inject({ url: "/api/progress", headers: { cookie } })).json().data.lessons).toEqual(["A"]);
-  });
-});
-
-describe("community", () => {
-  it("posts, replies, votes and lists", async () => {
-    const a = await signUp("a@example.test", "Alice");
-    const b = await signUp("b@example.test", "Bob");
-    const created = await app.inject({ method: "POST", url: "/api/posts", headers: { ...H, cookie: a.cookie }, payload: { tag: "Radio & ATC", title: "Why say niner?", body: "Curious." } });
-    expect(created.statusCode).toBe(201);
-    const id = created.json().post.id;
-    await app.inject({ method: "POST", url: `/api/posts/${id}/replies`, headers: { ...H, cookie: b.cookie }, payload: { body: "So it isn't confused with 'nein'." } });
-    const vote = await app.inject({ method: "PUT", url: `/api/posts/${id}/vote`, headers: { ...H, cookie: b.cookie } });
-    expect(vote.json()).toEqual({ votes: 1, votedByMe: true });
-    const unvote = await app.inject({ method: "PUT", url: `/api/posts/${id}/vote`, headers: { ...H, cookie: b.cookie } });
-    expect(unvote.json().votes).toBe(0);
-    const detail = (await app.inject({ url: `/api/posts/${id}`, headers: { cookie: b.cookie } })).json().post;
-    expect(detail.replies).toHaveLength(1);
-    expect(detail.replies[0].mine).toBe(true);
-    expect(detail.mine).toBe(false);
-    const list = (await app.inject({ url: "/api/posts?q=niner&tag=Radio%20%26%20ATC" })).json().posts;
-    expect(list).toHaveLength(1);
-    expect(list[0].replyCount).toBe(1);
-  });
-  it("only lets authors delete, and validates input", async () => {
-    const a = await signUp("a@example.test", "Alice");
-    const b = await signUp("b@example.test", "Bob");
-    const id = (await app.inject({ method: "POST", url: "/api/posts", headers: { ...H, cookie: a.cookie }, payload: { tag: "General", title: "Delete me later", body: "x" } })).json().post.id;
-    expect((await app.inject({ method: "DELETE", url: `/api/posts/${id}`, headers: { ...H, cookie: b.cookie } })).statusCode).toBe(404);
-    expect((await app.inject({ method: "DELETE", url: `/api/posts/${id}`, headers: { ...H, cookie: a.cookie } })).statusCode).toBe(200);
-    expect((await app.inject({ method: "POST", url: "/api/posts", headers: { ...H, cookie: a.cookie }, payload: { tag: "Nope", title: "Bad tag here", body: "x" } })).statusCode).toBe(400);
-    expect((await app.inject({ url: "/api/posts/not-a-uuid" })).statusCode).toBe(400);
-    expect((await app.inject({ method: "POST", url: "/api/posts", headers: H, payload: { tag: "General", title: "No session", body: "x" } })).statusCode).toBe(401);
   });
 });
 

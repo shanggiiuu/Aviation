@@ -10,7 +10,6 @@ const I18N = [
   ['#nav a[data-page="ops"]', { fil: "Paliparan" }], ['#nav a[data-page="atc"]', { fil: "ATC at Komunikasyon" }],
   ['#nav a[data-page="dictionary"]', { fil: "Diksiyonaryo" }], ['#nav a[data-page="aircraft"]', { fil: "Mga Eroplano" }],
   ['#nav a[data-page="careers"]', { fil: "Mga Karera" }], ['#nav a[data-page="quiz"]', { fil: "Mga Misyon" }], ['#nav a[data-page="shop"]', { fil: "Tindahan" }],
-  ['#nav a[data-page="community"]', { fil: "Komunidad" }],
   // home
   ["#page-home .hero h1", { fil: 'Unawain ang himpapawid.<span class="h1-sub">Isang aralin sa bawat pagkakataon.</span>' }],
   ["#page-home .hero-text > p", { fil: "Isang plataporma para sa mga baguhan sa pag-aaral ng abyasyon, na may interaktibong glosaryo, mga aralin, pagsusulit, at talakayan ng komunidad." }],
@@ -28,7 +27,6 @@ const I18N = [
     ['a[href="#atc"]', "ATC at Komunikasyon", "Unawain ang mga piloto, control tower, VHF, at komunikasyon sa radyo.", "Makinig →"],
     ['a[href="#dictionary"]', "Diksiyonaryo ng Abyasyon", () => `Maghanap ng mga salitang tulad ng VHF, PMR, ILS, IFR, at transponder — <span id="termCount">${GLOSSARY.length}</span> termino.`, "Maghanap ng salita →"],
     ['a[href="#quiz"]', "Mga Misyon", "Anim na misyon, mula First Flight hanggang Emergency Awareness. Makakuha ng bituin, XP at achievements.", "Magsimula ng misyon →"],
-    ['a[href="#community"]', "Komunidad", "Magtanong at makipagtalakayan tungkol sa abyasyon.", "Sumali sa talakayan →"],
     ['a[href="#aircraft"]', "Aklatan ng Eroplano", "Tuklasin ang iba't ibang eroplano at ang kanilang mga katangian.", "Tuklasin ang mga eroplano →"],
     ['a[href="#careers"]', "Mga Karera sa Abyasyon", "Kilalanin ang mga piloto, inhinyero, controller at planner sa likod ng bawat lipad, at sagutan ang Career Match Quiz.", "Hanapin ang iyong landas →"],
     ['a[href="#atc/sim"]', "Interaktibong ATC simulator", "Isang pinasimpleng simulation ng komunikasyon ng piloto at tower.", "Magsimula ng lipad →"],
@@ -70,8 +68,6 @@ const I18N = [
   ["#page-quiz > h2", { fil: "Mga Misyon" }],
   ["#page-quiz > p.sub", { fil: "Hindi lang basta pagsusulit, kundi mga misyon. Basahin ang briefing, tapusin ang mga gawain, at makakuha ng bituin, XP at achievements. Gusto ng mabilisang ensayo? Subukan ang libreng quiz o flashcards." }],
   ['#quizTabs [data-q="missions"]', { fil: "🚀 Mga Misyon" }], ['#quizTabs [data-q="quiz"]', { fil: "🏆 Libreng quiz" }],
-  ["#page-community > h2", { fil: "Komunidad" }],
-  ["#page-community > p.sub", { fil: "Magtanong at makipagtalakayan tungkol sa abyasyon." }],
 ];
 
 function applyLang(lang) {

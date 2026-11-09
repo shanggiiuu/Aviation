@@ -88,7 +88,7 @@ export function ProfilePage() {
         </div>
         {confirmDelete && (
           <form className="form danger-zone" onSubmit={del}>
-            <p><b>This permanently deletes your account, progress, posts and replies.</b> It can't be undone.</p>
+            <p><b>This permanently deletes your account and progress.</b> It can't be undone.</p>
             <label>Enter your password to confirm<input name="password" type="password" autoComplete="current-password" required /></label>
             <div className="row"><button type="button" className="btn ghost small" onClick={() => setConfirmDelete(false)}>Cancel</button><button className="btn small danger">Delete my account</button></div>
           </form>

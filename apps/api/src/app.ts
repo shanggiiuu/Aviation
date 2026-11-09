@@ -6,7 +6,6 @@ import type { Db } from "./db.js";
 import { SESSION_COOKIE, userForToken } from "./auth.js";
 import { authRoutes } from "./routes/auth.js";
 import { progressRoutes } from "./routes/progress.js";
-import { communityRoutes } from "./routes/community.js";
 import { liveRoutes } from "./routes/live.js";
 
 export interface AppOptions {
@@ -50,7 +49,6 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   });
   await app.register(authRoutes, { prefix: "/api" });
   await app.register(progressRoutes, { prefix: "/api" });
-  await app.register(communityRoutes, { prefix: "/api" });
   await app.register(liveRoutes, { prefix: "/api", fetchImpl: opts.fetchImpl ?? fetch });
   return app;
 }

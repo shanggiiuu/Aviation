@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AeroLearn — Understand the skies. One lesson at a time.</title>
-<meta name="description" content="A beginner-friendly aviation learning platform with an interactive glossary, lessons, quizzes, and community discussions.">
+<meta name="description" content="A beginner-friendly aviation learning platform with an interactive glossary, lessons, quizzes, and missions.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>">
 <link rel="stylesheet" href="style.css">
 <script>/* apply saved/system theme before first paint to avoid a flash */
@@ -29,7 +29,6 @@
     <a href="#careers" data-page="careers">Careers</a>
     <a href="#quiz" data-page="quiz">Missions</a>
     <a href="#shop" data-page="shop">Shop</a>
-    <a href="#community" data-page="community">Community</a>
   </nav>
   <div class="hdg-tape" aria-hidden="true"><div class="hdg-track" id="hdgTrack"></div><div class="hdg-mark"></div><div class="hdg-read" id="hdgRead">000</div></div>
   <select class="lang-sel" id="langSel" aria-label="Language / Wika" title="Language / Wika"></select>
@@ -44,7 +43,7 @@
     <div class="hero-text">
       <div class="label eyebrow">AeroLearn</div>
       <h1>Understand the skies.<span class="h1-sub">One lesson at a time.</span></h1>
-      <p>A beginner-friendly aviation learning platform with an interactive glossary, lessons, quizzes, and community discussions.</p>
+      <p>A beginner-friendly aviation learning platform with an interactive glossary, lessons, quizzes, and missions.</p>
       <form id="heroSearch" class="hero-search" autocomplete="off">
         <input id="heroInput" type="search" placeholder="Look up a word… try VHF, PMR, ILS, METAR" aria-label="Search glossary">
         <button type="submit" class="btn">Search</button>
@@ -106,7 +105,6 @@
     <a class="card link" href="#atc"><div class="card-ico">🎧</div><h3>ATC &amp; Communications</h3><p>Understand pilots, control towers, VHF, and radio communication.</p><span class="go">Tune in →</span></a>
     <a class="card link" href="#dictionary"><div class="card-ico">📖</div><h3>Aviation Dictionary</h3><p>Search words like VHF, PMR, ILS, IFR, and transponder — <span id="termCount">140</span> terms.</p><span class="go">Look up a word →</span></a>
     <a class="card link" href="#quiz"><div class="card-ico">🚀</div><h3>Missions</h3><p>Six missions, from First Flight to Emergency Awareness. Earn stars, XP and achievements.</p><span class="go">Start a mission →</span></a>
-    <a class="card link" href="#community"><div class="card-ico">💬</div><h3>Community</h3><p>Ask questions and discuss aviation.</p><span class="go">Join the discussion →</span></a>
     <a class="card link" href="#aircraft"><div class="card-ico">🛩</div><h3>Aircraft Library</h3><p>Explore different aircraft and their characteristics.</p><span class="go">Explore aircraft →</span></a>
     <a class="card link" href="#careers"><div class="card-ico">🧭</div><h3>Aviation Careers</h3><p>Meet the pilots, engineers, controllers and planners behind every flight, and take the Career Match Quiz.</p><span class="go">Find your path →</span></a>
   </div>
@@ -116,7 +114,7 @@
     <a class="card link" href="#atc/sim"><div class="card-ico">🗼</div><h3>Interactive ATC simulator</h3><p>A simplified educational simulation of pilot and tower communication.</p><span class="go">Start a flight →</span></a>
     <a class="card link" href="#aircraft/explorer"><div class="card-ico">🔍</div><h3>Aircraft explorer</h3><p>Click different aircraft parts to learn their names and functions.</p><span class="go">Explore parts →</span></a>
     <a class="card link" href="#dashboard"><div class="card-ico">📊</div><h3>Aviation dashboard</h3><p>Flight terminology, airport information, aircraft profiles, and weather education.</p><span class="go">Open dashboard →</span></a>
-    <a class="card link" href="#profile"><div class="card-ico">👤</div><h3>Learning accounts</h3><p>User profiles, saved vocabulary, learning progress, and community discussions.</p><span class="go">Your profile →</span></a>
+    <a class="card link" href="#profile"><div class="card-ico">👤</div><h3>Learning accounts</h3><p>User profiles, saved vocabulary, learning progress and badges.</p><span class="go">Your profile →</span></a>
   </div>
 
   <h2 class="mt">Handy tools</h2>
@@ -821,31 +819,6 @@
   </div>
 </section>
 
-<!-- ================= COMMUNITY ================= -->
-<section id="page-community" class="page">
-  <h2>Community</h2>
-  <p class="sub">Ask questions and discuss aviation.</p>
-  <div class="notice">ℹ Demo mode: posts are saved in <b>this browser only</b>. To let visitors see each other's posts, the site needs an online database — see the README note in <code>app.js</code>.</div>
-  <div class="community">
-    <div>
-      <div class="gloss-controls">
-        <input id="cSearch" type="search" placeholder="Search discussions…" autocomplete="off">
-        <select id="cSort"><option value="new">Newest</option><option value="top">Most upvoted</option><option value="open">Unanswered first</option></select>
-      </div>
-      <div class="chips filters" id="cFilters"></div>
-      <div id="cList" class="c-list"></div>
-    </div>
-    <form id="cForm" class="card c-form" autocomplete="off">
-      <div class="label">Ask a question</div>
-      <input name="name" placeholder="Your display name" maxlength="30" required>
-      <select name="tag"></select>
-      <input name="title" placeholder="Question title, e.g. Why do pilots say 'niner'?" maxlength="120" required>
-      <textarea name="body" rows="5" placeholder="Add details…" maxlength="2000" required></textarea>
-      <button class="btn">Post question</button>
-      <p class="sub small">Be kind and stay on topic. Not for real-world flight advice.</p>
-    </form>
-  </div>
-</section>
 </main>
 
 <!-- Term modal -->

@@ -62,15 +62,15 @@ document.addEventListener("click", (e) => {
 });
 
 // ================= Router =================
-const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "careers", "quiz", "shop", "community", "profile"];
+const pages = ["home", "dashboard", "academy", "lab", "ops", "atc", "dictionary", "aircraft", "careers", "quiz", "shop", "profile"];
 const PAGE_ANCHORS = { "atc/sim": "#sim", "aircraft/explorer": "#explorer", "careers/quiz": "#careerQuiz",
   "aircraft/compare": "#acCompareCard", "aircraft/timeline": "#timeline", "dictionary/decoder": "#decoder" };
 const PAGE_ALIASES = { learn: "academy", glossary: "dictionary", tools: "academy", missions: "quiz" }; // old links keep working
 // ---- Running inside the React app (apps/web) ----
 // Pages that now live in React are handed to the parent; other navigation is reported so its URL stays in step.
 const EMBEDDED = document.documentElement.classList.contains("embedded");
-const STATIC_HOST = /[?&]static=1(&|$)/.test(location.search); // static-site build: no React account/community pages to hand over to
-const REACT_PAGES = STATIC_HOST ? {} : { community: "/community", profile: "/profile" };
+const STATIC_HOST = /[?&]static=1(&|$)/.test(location.search); // static-site build: no React account pages to hand over to
+const REACT_PAGES = STATIC_HOST ? {} : { profile: "/profile" };
 const toParent = (msg) => { if (EMBEDDED) window.parent.postMessage(msg, location.origin); };
 let lastLegacyHash = "#home";
 if (EMBEDDED) {
@@ -1476,111 +1476,12 @@ function initAircraft() {
   renderCompare();
 }
 
-// ================= COMMUNITY =================
-// NOTE (README): posts are stored in localStorage, so each visitor only sees their own browser's posts.
-// To make the community shared, replace loadPosts()/savePosts() with calls to an online database
-// (e.g. Supabase, Firebase/Firestore, or your own API) and add sign-in + moderation.
-const C_TAGS = ["General", "Radio & ATC", "Aircraft", "Training", "Weather"];
-const SEED_POSTS = [
-  { id: "ex1", example: true, name: "AeroLearn team", tag: "Radio & ATC", title: "What's the difference between VHF and PMR?", ts: Date.now() - 3 * 864e5, votes: 12,
-    body: "I have PMR walkie-talkies at home. Can I use them to listen to or talk to pilots?",
-    replies: [{ name: "AeroLearn team", ts: Date.now() - 2.9 * 864e5, body: "No — PMR446 is a licence-free UHF FM band (446 MHz) for the public. Aviation voice uses AM on the VHF airband (118–137 MHz). You can listen to airband with a scanner where that's legal, but transmitting needs a licensed aviation radio and an operator certificate. See 'PMR' and 'VHF' in the Dictionary." }] },
-  { id: "ex2", example: true, name: "AeroLearn team", tag: "Training", title: "How long does it take to get a private pilot licence?", ts: Date.now() - 6 * 864e5, votes: 8,
-    body: "Thinking about starting flying lessons. What's involved?",
-    replies: [{ name: "AeroLearn team", ts: Date.now() - 5.8 * 864e5, body: "A PPL typically needs at least 45 flight hours (country rules vary), theory exams on topics like air law, meteorology and navigation, a medical certificate, and a skills test. Many people take 6–12 months flying weekly." }] },
-  { id: "ex3", example: true, name: "AeroLearn team", tag: "Aircraft", title: "Why do airliners cruise so high?", ts: Date.now() - 9 * 864e5, votes: 5,
-    body: "Why 35,000 ft and not 10,000 ft?", replies: [] },
-];
-const loadPosts = () => store.get("posts", null) ?? SEED_POSTS;
-const isMine = (p) => (p.author ? p.author === CURRENT : !!p.mine && CURRENT === "guest");
-const defaultName = () => (CURRENT === "guest" ? store.get("cname", "") : currentProfile().name);
-const savePosts = (p) => store.set("posts", p);
-const cState = { tag: "all" };
+// Relative time for quiz history ("3 h ago").
 const timeAgo = (ts) => {
   const s = (Date.now() - ts) / 1000;
   if (s < 60) return "just now"; if (s < 3600) return `${Math.floor(s / 60)} min ago`;
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`; return `${Math.floor(s / 86400)} d ago`;
 };
-function renderCommunityFilters() {
-  $("#cFilters").innerHTML = [["all", "All"], ...C_TAGS.map((t) => [t, t])]
-    .map(([k, v]) => `<button class="chip ${cState.tag === k ? "active" : ""}" data-tag="${esc(k)}">${esc(v)}</button>`).join("");
-  $$("#cFilters .chip").forEach((b) => b.onclick = () => { cState.tag = b.dataset.tag; renderCommunityFilters(); renderPosts(); });
-}
-function renderPosts() {
-  const q = $("#cSearch").value.trim().toLowerCase();
-  const voted = store.get("voted", []);
-  const sort = $("#cSort").value;
-  const list = loadPosts().filter((p) => (cState.tag === "all" || p.tag === cState.tag) &&
-    (!q || `${p.title} ${p.body} ${p.replies.map((r) => r.body).join(" ")}`.toLowerCase().includes(q)));
-  list.sort((a, b) => sort === "top" ? b.votes - a.votes : sort === "open" ? (a.replies.length > 0) - (b.replies.length > 0) || b.ts - a.ts : b.ts - a.ts);
-  $("#cList").innerHTML = list.length ? list.map((p) => `
-    <div class="card c-post" data-id="${esc(p.id)}">
-      <button class="vote ${voted.includes(p.id) ? "on" : ""}" data-vote="${esc(p.id)}" title="Upvote">▲<b>${p.votes}</b></button>
-      <div class="c-main">
-        <h3>${esc(p.title)}</h3>
-        <div class="c-meta"><span class="badge">${esc(p.tag)}</span>${p.example ? `<span class="badge custom">Example</span>` : ""}
-          <span>${esc(p.name)} · ${timeAgo(p.ts)}</span>
-          <span class="${p.replies.length ? "answered" : "open"}">${p.replies.length ? `✓ ${p.replies.length} repl${p.replies.length === 1 ? "y" : "ies"}` : "Unanswered"}</span></div>
-      </div>
-    </div>`).join("") : `<div class="empty">No discussions found. Be the first to ask!</div>`;
-}
-function vote(id) {
-  let voted = store.get("voted", []);
-  const posts = loadPosts(); const p = posts.find((x) => x.id === id); if (!p) return;
-  if (voted.includes(id)) { voted = voted.filter((v) => v !== id); p.votes--; } else { voted.push(id); p.votes++; }
-  store.set("voted", voted); savePosts(posts); renderPosts();
-}
-function openThread(id) {
-  const p = loadPosts().find((x) => x.id === id); if (!p) return;
-  $("#modalBody").innerHTML = `
-    <div class="c-meta"><span class="badge">${esc(p.tag)}</span>${p.example ? `<span class="badge custom">Example</span>` : ""}<span>${esc(p.name)} · ${timeAgo(p.ts)}</span></div>
-    <h2 style="margin-top:.5rem">${esc(p.title)}</h2>
-    <p class="c-body">${esc(p.body)}</p>
-    <div class="label">${p.replies.length} repl${p.replies.length === 1 ? "y" : "ies"}</div>
-    <div class="c-replies">${p.replies.map((r) => `<div class="c-reply"><div class="c-meta"><b>${esc(r.name)}</b> · ${timeAgo(r.ts)}</div><p>${esc(r.body)}</p></div>`).join("") || `<p class="sub">No replies yet — share what you know!</p>`}</div>
-    <form id="replyForm" class="c-reply-form" autocomplete="off">
-      <input name="name" placeholder="Your display name" maxlength="30" required value="${esc(defaultName())}">
-      <textarea name="body" rows="3" placeholder="Write a reply…" maxlength="2000" required></textarea>
-      <div class="row end">${isMine(p) ? `<button type="button" class="btn ghost small" id="delPost">🗑 Delete my question</button>` : ""}<button class="btn small">Reply</button></div>
-    </form>`;
-  $("#modal").classList.remove("hidden");
-  $("#replyForm").onsubmit = (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target), name = fd.get("name").trim(), body = fd.get("body").trim();
-    if (!name || !body) return;
-    store.set("cname", name);
-    const posts = loadPosts(); const t = posts.find((x) => x.id === id);
-    t.replies.push({ name, body, ts: Date.now(), author: CURRENT }); savePosts(posts);
-    addXP(5, "Reply posted"); renderPosts(); openThread(id);
-  };
-  const del = $("#delPost");
-  if (del) del.onclick = () => { savePosts(loadPosts().filter((x) => x.id !== id)); closeModal(); renderPosts(); toast("Question deleted"); };
-}
-function initCommunity() {
-  const f = $("#cForm");
-  $("[name=tag]", f).innerHTML = C_TAGS.map((t) => `<option>${esc(t)}</option>`).join("");
-  $("[name=name]", f).value = defaultName();
-  f.onsubmit = (e) => {
-    e.preventDefault();
-    const fd = new FormData(f);
-    const post = { id: "p" + Date.now().toString(36), author: CURRENT, name: fd.get("name").trim(), tag: fd.get("tag"),
-      title: fd.get("title").trim(), body: fd.get("body").trim(), ts: Date.now(), votes: 0, replies: [] };
-    if (!post.name || !post.title || !post.body) return;
-    store.set("cname", post.name);
-    savePosts([post, ...loadPosts()]);
-    f.elements.title.value = ""; f.elements.body.value = "";
-    addXP(10, "Question posted"); cState.tag = "all"; renderCommunityFilters(); renderPosts();
-  };
-  $("#cSearch").addEventListener("input", renderPosts);
-  $("#cSort").addEventListener("change", renderPosts);
-  $("#cList").addEventListener("click", (e) => {
-    const v = e.target.closest("[data-vote]");
-    if (v) { vote(v.dataset.vote); return; }
-    const c = e.target.closest(".c-post"); if (c) openThread(c.dataset.id);
-  });
-  renderCommunityFilters(); renderPosts();
-}
-
 // ================= INTERACTIVE ATC SIMULATOR =================
 const SIM_START = [420, 40, 0];
 const SIM_UNITS = { "127.250": "ATIS", "121.800": "GROUND", "118.700": "TOWER" };
@@ -1907,16 +1808,14 @@ function initDashboard() {
 
 // ================= LEARNING ACCOUNTS (PROFILES) =================
 // Profiles live on this device only (localStorage). Real online accounts would need a server with
-// authentication — see the Community README note above for the same upgrade path.
+// authentication (the React app in apps/web provides them).
 const GOALS = ["Just curious", "Future student pilot", "Student pilot", "Aviation enthusiast", "Future air traffic controller", "Cabin crew / airline staff"];
 function profileStats() {
-  const lp = lessonProgress(), posts = loadPosts();
+  const lp = lessonProgress();
   return {
     ...lp, xp: store.get("xp", 0), best: store.get("best", 0), fav: store.get("fav", []).length, viewed: store.get("viewed", []).length,
     parts: store.get("partsFound", []).length, simBest: store.get("simBest", 0), simDone: store.get("simDone", false), exBest: store.get("exBest", 0),
     quizzes: store.get("quizHistory", []).length,
-    posts: posts.filter(isMine).length,
-    replies: posts.reduce((n, p) => n + p.replies.filter((r) => r.author === CURRENT).length, 0),
   };
 }
 const BADGES = [
@@ -1928,21 +1827,19 @@ const BADGES = [
   ["📚", "Word collector", "Save 10 words", (s) => s.fav >= 10],
   ["🔎", "Curious mind", "Open 25 dictionary terms", (s) => s.viewed >= 25],
   ["🛩", "Plane spotter", "Discover every aircraft part", (s) => s.parts >= Object.keys(PARTS).length],
-  ["💬", "Community voice", "Post a question or reply", (s) => s.posts + s.replies >= 1],
 ];
 function switchProfile(id) { rawSet("sky_current", id); location.hash = "profile"; location.reload(); }
 function renderProfile() {
   const prof = currentProfile(), s = profileStats(), profiles = store.get("profiles", []);
   const favs = store.get("fav", []);
   const hist = store.get("quizHistory", []).slice(-8).reverse();
-  const myPosts = loadPosts().filter(isMine);
   const others = profiles.filter((p) => p.id !== CURRENT);
 
   const header = CURRENT === "guest" ? `
     <div class="card">
       <div class="label">Learning accounts</div>
       <h2 style="margin-top:0">Create your learning profile</h2>
-      <p class="sub">Profiles keep your own progress, saved vocabulary, badges and community posts. They're stored on <b>this device</b> — use Export below to move your progress to another device.</p>
+      <p class="sub">Profiles keep your own progress, saved vocabulary and badges. They're stored on <b>this device</b> — use Export below to move your progress to another device.</p>
       <form id="pfCreate" class="pf-form" autocomplete="off">
         <input name="name" placeholder="Display name" maxlength="24" required>
         <select name="goal">${GOALS.map((g) => `<option>${esc(g)}</option>`).join("")}</select>
@@ -1999,10 +1896,6 @@ function renderProfile() {
         ${hist.length ? `<div class="quiz-hist">${hist.map((h) => `<div><b>${h.score}/${h.total}</b><small>${timeAgo(h.ts)}</small></div>`).join("")}</div>` : `<p class="sub">No quizzes yet — <a href="#quiz">take your first Knowledge Check</a>.</p>`}
       </div>
       <div class="card">
-        <div class="label">Community discussions · ${s.posts} questions · ${s.replies} replies</div>
-        ${myPosts.length ? `<ul class="pf-posts">${myPosts.map((p) => `<li><a class="term-link" data-thread="${esc(p.id)}">${esc(p.title)}</a> <span class="sub small">· ${p.replies.length} repl${p.replies.length === 1 ? "y" : "ies"}</span></li>`).join("")}</ul>` : `<p class="sub">You haven't asked anything yet. <a href="#community">Visit the Community</a>.</p>`}
-      </div>
-      <div class="card">
         <div class="label">Your data</div>
         <p class="sub small">Download your progress as a file, or load it on another device or browser.</p>
         <div class="row"><button class="btn ghost small" id="pfExport">⬇ Export progress</button>
@@ -2037,7 +1930,6 @@ function renderProfile() {
     switchProfile("guest");
   };
   $$("[data-unfav]").forEach((b) => b.onclick = () => { toggleFav(b.dataset.unfav); renderProfile(); });
-  $$("[data-thread]").forEach((a) => a.onclick = (e) => { e.preventDefault(); openThread(a.dataset.thread); });
   const fl = $("#pfFlash");
   if (fl) fl.onclick = () => { fc.cat = "fav"; renderFlashFilters(); buildDeck(); location.hash = "quiz"; $('#quizTabs [data-q="flash"]').click(); };
   $("#pfExport").onclick = () => {
@@ -2106,7 +1998,6 @@ renderLessons("#atcLessons", ATC_LESSONS, "atc");
 renderAtcSteps();
 startRadioSim();
 initAircraft();
-initCommunity();
 initSim();
 initExplorer();
 initDashboard();

@@ -9,8 +9,8 @@ import { STATIC } from "../config";
 const NAV: [string, StringKey][] = [
   ["/", "home"], ["/dashboard", "dashboard"], ["/academy", "academy"], ["/lab", "lab"], ["/ops", "ops"], ["/atc", "atc"],
   ["/dictionary", "dictionary"], ["/aircraft", "aircraft"], ["/careers", "careers"], ["/missions", "missions"], ["/shop", "shop"],
-  ["/community", "community"], ["/live", "live"],
-].filter(([to]) => !STATIC || (to !== "/community" && to !== "/live")) as [string, StringKey][];
+  ["/live", "live"],
+].filter(([to]) => !STATIC || to !== "/live") as [string, StringKey][];
 
 export function Layout({ legacy = false }: { legacy?: boolean }) {
   const { user } = useAuth();

@@ -3,8 +3,6 @@ import { Layout } from "./components/Layout";
 import { LegacyFrame } from "./components/LegacyFrame";
 import { LoginPage, RegisterPage } from "./pages/Auth";
 import { ProfilePage } from "./pages/Profile";
-import { CommunityPage } from "./pages/Community";
-import { ThreadPage } from "./pages/Thread";
 import { LivePage } from "./pages/Live";
 import { STATIC } from "./config";
 
@@ -17,8 +15,6 @@ export function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/community" element={<CommunityPage />} />
-        <Route path="/community/:id" element={<ThreadPage />} />
         <Route path="/live" element={<LivePage />} />
       </Route>}
       <Route element={<Layout legacy />}>
