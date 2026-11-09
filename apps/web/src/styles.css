@@ -41,7 +41,8 @@ h2.no-bar { text-transform: none; letter-spacing: .02em; } h2.no-bar::before { d
 [data-theme="night"] .topbar { background: rgba(8, 14, 34, .78); }
 .brand { font: 300 1.3rem var(--font-hud); text-decoration: none; color: var(--text); letter-spacing: .04em; white-space: nowrap; }
 .brand b { color: var(--accent); font-weight: 700; } .brand-icon { display: inline-block; transform: rotate(-20deg); color: var(--accent2); }
-.nav { display: flex; gap: .2rem; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+/* the menu gets its own row and wraps, so every page link is visible at any width (no hidden horizontal scroll) */
+.nav { display: flex; flex-wrap: wrap; justify-content: center; gap: .2rem; order: 3; flex-basis: 100%; min-width: 0; padding-top: .35rem; border-top: 1px solid var(--line); }
 .nav a { font: 600 .76rem var(--font-hud); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); text-decoration: none; padding: .4rem .65rem; border-radius: 8px; white-space: nowrap; }
 .nav a:hover { color: var(--accent); background: rgba(37, 99, 235, .07); }
 .nav a.active { color: #fff; background: linear-gradient(180deg, #3b82f6, var(--accent)); }
@@ -54,7 +55,10 @@ h2.no-bar { text-transform: none; letter-spacing: .02em; } h2.no-bar::before { d
 [data-theme="night"] .account-chip .xp.coins { color: #fcd34d; }
 .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .sync-dot.saved { background: var(--ok); } .sync-dot.syncing { background: #f59e0b; } .sync-dot.error { background: var(--red); }
-@media (max-width: 760px) { .nav { order: 3; flex-basis: 100%; } .acct-name, .account-chip .xp { display: none; } }
+@media (max-width: 760px) {
+  .acct-name, .account-chip .xp:not(.coins) { display: none; }
+  .nav a { padding: .35rem .5rem; font-size: .7rem; letter-spacing: .05em; }
+}
 
 /* components */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.25rem; box-shadow: 0 8px 26px rgba(37, 99, 235, .07); min-width: 0; }
