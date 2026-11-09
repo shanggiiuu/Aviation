@@ -159,11 +159,14 @@ function makeStage(el, petIds, spots, opts = {}) {
     node.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(e); } });
     stage.pets.push(pet);
   }
-  el.addEventListener("mousemove", (e) => {
+  // pointer events cover mouse and touch: on phones the pets walk to where you tap or drag
+  const track = (e) => {
     if (!stage.follow) return;
     const r = el.getBoundingClientRect();
     stage.cursor = { x: e.clientX - r.left, y: e.clientY - r.top };
-  });
+  };
+  el.addEventListener("pointermove", track);
+  el.addEventListener("pointerdown", track);
   STAGES.push(stage);
   return stage;
 }
